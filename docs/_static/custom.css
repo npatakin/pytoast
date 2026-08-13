@@ -1,0 +1,19 @@
+/* Distinguish attribute signatures from method signatures.
+   Furo uses --color-api-name (default: red) for the identifier text.
+   Attributes get a teal name color and a matching subtle background. */
+
+dl.py.attribute {
+    --color-api-name: #046172;
+    --color-api-pre-name: #046172;
+    --color-api-background: rgba(4, 97, 114, 0.06);
+    --color-api-background-hover: rgba(4, 97, 114, 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+    dl.py.attribute {
+        --color-api-name: #06a1bc;
+        --color-api-pre-name: #06a1bc;
+        --color-api-background: rgba(6, 161, 188, 0.08);
+        --color-api-background-hover: rgba(6, 161, 188, 0.15);
+    }
+}
