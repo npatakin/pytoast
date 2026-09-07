@@ -201,16 +201,11 @@ def sample_trajectory(
         right_q = seq_quats.take_along_dim(right_idx, dim=-2)
         # print('left_q:', left_q.shape, 'right_q:', right_q.shape)
         out_quats = quat_slerp(left_q, right_q, rel_time.unsqueeze(-1))
-        # print('slerp_q:', slerp_quats.shape, 'delta_time:', delta_time.shape)
-
-        # extr_quats = quat_std(apply_angular_velocity(left_q, w, rel_time_enum.unsqueeze(-1)))
-        #
-        # out_quats = torch.where(
-        #     left_extr_mask.unsqueeze(-1),
-        #     extr_quats, slerp_quats
-        # )
-        out_quats[invalid_mask, 0] = 1
-        out_quats[invalid_mask, 1:] = 0
+        
+        # identity quaternion where no valid keyframes exist; assigned through a
+        # mask-only index since "tensor[bool_mask, int]" is mis-handled by
+        # older torch versions
+        out_quats[invalid_mask] = out_quats.new_tensor([1., 0., 0., 0.])
 
         if return_velocities:
             out_w = angular_velocity(left_q, right_q, delta_time.unsqueeze(-1))
