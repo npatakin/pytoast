@@ -1,7 +1,7 @@
 #ifndef PYTOAST_QUAT_BIND_H
 #define PYTOAST_QUAT_BIND_H
 
-#include <torch/extension.h>
+#include <torch/csrc/utils/pybind.h>
 
 #include <toast/utils/tensor_helpers.h>
 

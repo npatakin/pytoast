@@ -8,10 +8,10 @@ DEFINE_KERNEL(launch_from_axis_angle_fwd, {
     out[offsets[0]] = CLS(out)::from_axis_angle(aa[offsets[1]]);
 })
 
-torch::Tensor quat_from_axis_angle_fwd(const torch::Tensor& axis_angle) {
+at::Tensor quat_from_axis_angle_fwd(const at::Tensor& axis_angle) {
     auto sizes = axis_angle.sizes().vec();
     sizes.back() = 4;
-    auto out = torch::empty(sizes, axis_angle.options());
+    auto out = at::empty(sizes, axis_angle.options());
     auto iter = make_tensor_iterator({out}, {axis_angle});
     check_operand_last_dims(iter, {4, 3});
     DISPATCH_KERNEL(launch_from_axis_angle_fwd, quat_t*, const vec3*)
@@ -23,8 +23,8 @@ DEFINE_KERNEL(launch_from_axis_angle_bwd, {
     out[offsets[0]] = CLS(grad)::from_axis_angle_backward(aa[offsets[1]], grad[offsets[2]].q);
 })
 
-torch::Tensor quat_from_axis_angle_bwd(const torch::Tensor& axis_angle, const torch::Tensor& grad_output) {
-    auto out = torch::empty_like(axis_angle);
+at::Tensor quat_from_axis_angle_bwd(const at::Tensor& axis_angle, const at::Tensor& grad_output) {
+    auto out = at::empty_like(axis_angle);
     auto iter = make_tensor_iterator({out}, {axis_angle, grad_output});
     check_operand_last_dims(iter, {3, 3, 4});
     DISPATCH_KERNEL(launch_from_axis_angle_bwd, vec3*, const vec3*, const quat_t*)

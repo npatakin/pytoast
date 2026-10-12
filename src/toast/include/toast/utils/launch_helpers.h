@@ -6,6 +6,8 @@
 #include <type_traits>
 
 #include <ATen/Parallel.h>
+#include <ATen/Dispatch.h>
+#include <ATen/TensorIterator.h>
 
 #include <toast/utils/vector_math.h>
 
@@ -22,7 +24,7 @@
 
 
 template <typename T>
-T* data_ptr(const torch::Tensor& tensor) {
+T* data_ptr(const at::Tensor& tensor) {
     return (T*)tensor.data_ptr();
 }
 
@@ -38,7 +40,7 @@ __global__ void linear_kernel(int num_elements, F f) {
 template <int threads = CUDA_DEFAULT_NUM_THREADS, typename F, typename ...Args>
 void launch_kernel_cuda(
     uint num_elements,
-    const torch::Device& device,
+    const at::Device& device,
     const F& f,
     const Args&... args
 ) {
@@ -54,7 +56,7 @@ void launch_kernel_cuda(
 }
 
 template <int threads = CUDA_DEFAULT_NUM_THREADS, typename F>
-void launch_linear_kernel_cuda(uint num_points, const torch::Device& device, F f) {
+void launch_linear_kernel_cuda(uint num_points, const at::Device& device, F f) {
     // see launch_kernel_cuda: a 0-block grid is an invalid launch configuration
     if (num_points == 0) { return; }
     const at::cuda::OptionalCUDAGuard device_guard(device);
@@ -74,7 +76,7 @@ void launch_linear_kernel_cuda(uint num_points, const torch::Device& device, F f
 
 
 template <int cuda_threads = CUDA_DEFAULT_NUM_THREADS, typename F>
-void launch_linear_kernel(uint num_points, const torch::Device& device, F f) {
+void launch_linear_kernel(uint num_points, const at::Device& device, F f) {
     if (device.is_cpu()) {
         at::parallel_for(0, num_points, 32768, [&](int64_t begin, int64_t end) {
             // printf("parallel_for: [%ld; %ld) size=%ld\n", begin, end, end - begin); fflush(stdout);

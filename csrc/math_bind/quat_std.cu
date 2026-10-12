@@ -8,8 +8,8 @@ DEFINE_KERNEL(launch_std_fwd, {
     outs[offsets[0]] = quats[offsets[1]].std();
 })
 
-auto quat_std_fwd(const torch::Tensor& q) {
-    auto out = torch::empty_like(q);
+auto quat_std_fwd(const at::Tensor& q) {
+    auto out = at::empty_like(q);
     auto iter = make_tensor_iterator({out}, {q});
     check_operand_last_dims(iter, {4, 4});
     DISPATCH_KERNEL(launch_std_fwd, quat_t*, const quat_t*)
@@ -21,8 +21,8 @@ DEFINE_KERNEL(launch_std_bwd, {
     outs[offsets[0]] = CLS(quats)::std_backward(quats[offsets[1]], grads[offsets[2]]);
 })
 
-auto quat_std_bwd(const torch::Tensor& q, const torch::Tensor& grad) {
-    auto out = torch::empty_like(q);
+auto quat_std_bwd(const at::Tensor& q, const at::Tensor& grad) {
+    auto out = at::empty_like(q);
     auto iter = make_tensor_iterator({out}, {q, grad});
     check_operand_last_dims(iter, {4, 4, 4});
     DISPATCH_KERNEL(launch_std_bwd, vec4*, const quat_t*, const vec4*)

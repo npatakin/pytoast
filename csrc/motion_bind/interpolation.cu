@@ -37,11 +37,11 @@ __global__ void extrapolate_indices_cuda(
 #endif // TOAST_WITH_CUDA
 
 
-torch::Tensor extrapolate_indices(const torch::Tensor& masks, uint extrapolate_window) {
+at::Tensor extrapolate_indices(const at::Tensor& masks, uint extrapolate_window) {
     const uint batch_size = masks.size(0);
     const uint num_keyframes = masks.size(1);
 
-    auto out = torch::empty({batch_size, 4}, at::TensorOptions().device(masks.device()).dtype(torch::kInt32));
+    auto out = at::empty({batch_size, 4}, at::TensorOptions().device(masks.device()).dtype(at::kInt));
 
     auto masks_ptr = (const bool*)masks.data_ptr();
     auto out_ptr = (int4*)out.data_ptr();

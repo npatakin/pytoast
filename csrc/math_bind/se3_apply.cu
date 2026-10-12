@@ -10,9 +10,9 @@ DEFINE_KERNEL(launch_se3_apply_fwd, {
 })
 
 auto se3_apply_fwd(
-    const torch::Tensor& q, const torch::Tensor& t, const torch::Tensor& p
+    const at::Tensor& q, const at::Tensor& t, const at::Tensor& p
 ) {
-    auto out = torch::empty_like(p);
+    auto out = at::empty_like(p);
     auto iter = make_tensor_iterator({out}, {q, t, p});
     check_operand_last_dims(iter, {3, 4, 3, 3});
     DISPATCH_KERNEL(launch_se3_apply_fwd, vec3*, const quat_t*, const vec3*, const vec3*)
@@ -33,12 +33,12 @@ DEFINE_KERNEL(launch_se3_apply_bwd, {
 })
 
 auto se3_apply_bwd(
-    const torch::Tensor& q, const torch::Tensor& t,
-    const torch::Tensor& p, const torch::Tensor& grad
+    const at::Tensor& q, const at::Tensor& t,
+    const at::Tensor& p, const at::Tensor& grad
 ) {
-    auto dq = torch::empty_like(q);
-    auto dt = torch::empty_like(t);
-    auto dp = torch::empty_like(p);
+    auto dq = at::empty_like(q);
+    auto dt = at::empty_like(t);
+    auto dp = at::empty_like(p);
     auto iter = make_tensor_iterator({dq, dt, dp}, {q, t, p, grad});
     check_operand_last_dims(iter, {4, 3, 3, 4, 3, 3, 3});
     DISPATCH_KERNEL(launch_se3_apply_bwd,
@@ -56,9 +56,9 @@ DEFINE_KERNEL(launch_se3_apply_inv_fwd, {
 })
 
 auto se3_apply_inv_fwd(
-    const torch::Tensor& q, const torch::Tensor& t, const torch::Tensor& p
+    const at::Tensor& q, const at::Tensor& t, const at::Tensor& p
 ) {
-    auto out = torch::empty_like(p);
+    auto out = at::empty_like(p);
     auto iter = make_tensor_iterator({out}, {q, t, p});
     check_operand_last_dims(iter, {3, 4, 3, 3});
     DISPATCH_KERNEL(launch_se3_apply_inv_fwd, vec3*, const quat_t*, const vec3*, const vec3*)
@@ -79,12 +79,12 @@ DEFINE_KERNEL(launch_se3_apply_inv_bwd, {
 })
 
 auto se3_apply_inv_bwd(
-    const torch::Tensor& q, const torch::Tensor& t,
-    const torch::Tensor& p, const torch::Tensor& grad
+    const at::Tensor& q, const at::Tensor& t,
+    const at::Tensor& p, const at::Tensor& grad
 ) {
-    auto dq = torch::empty_like(q);
-    auto dt = torch::empty_like(t);
-    auto dp = torch::empty_like(p);
+    auto dq = at::empty_like(q);
+    auto dt = at::empty_like(t);
+    auto dp = at::empty_like(p);
     auto iter = make_tensor_iterator({dq, dt, dp}, {q, t, p, grad});
     check_operand_last_dims(iter, {4, 3, 3, 4, 3, 3, 3});
     DISPATCH_KERNEL(launch_se3_apply_inv_bwd,

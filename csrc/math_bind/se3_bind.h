@@ -1,7 +1,7 @@
 #ifndef PYTOAST_SE3_BIND_H
 #define PYTOAST_SE3_BIND_H
 
-#include <torch/extension.h>
+#include <torch/csrc/utils/pybind.h>
 #include <toast/utils/tensor_helpers.h>
 
 void bind_se3_apply(py::module& m);

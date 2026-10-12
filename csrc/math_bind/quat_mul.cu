@@ -8,8 +8,8 @@ DEFINE_KERNEL(launch_quat_mul_fwd, {
     out_ptr[offsets[0]] = q1_ptr[offsets[1]].quat_mul(q2_ptr[offsets[2]]);
 })
 
-auto quat_mul_fwd(const torch::Tensor& q1, const torch::Tensor& q2) {
-    auto out = torch::empty_like(q1);
+auto quat_mul_fwd(const at::Tensor& q1, const at::Tensor& q2) {
+    auto out = at::empty_like(q1);
     auto iter = make_tensor_iterator({out}, {q1, q2});
     check_operand_last_dims(iter, {4, 4, 4});
     DISPATCH_KERNEL(launch_quat_mul_fwd, quat_t*, const quat_t*, const quat_t*)
@@ -25,9 +25,9 @@ DEFINE_KERNEL(launch_quat_mul_bwd, {
     );
 })
 
-auto quat_mul_bwd(const torch::Tensor& q1, const torch::Tensor& q2, const torch::Tensor& grad) {
-    auto dq1 = torch::empty_like(q1);
-    auto dq2 = torch::empty_like(q2);
+auto quat_mul_bwd(const at::Tensor& q1, const at::Tensor& q2, const at::Tensor& grad) {
+    auto dq1 = at::empty_like(q1);
+    auto dq2 = at::empty_like(q2);
     auto iter = make_tensor_iterator({dq1, dq2}, {q1, q2, grad});
     check_operand_last_dims(iter, {4, 4, 4, 4, 4});
     DISPATCH_KERNEL(launch_quat_mul_bwd, vec4*, vec4*, const quat_t*, const quat_t*, const vec4*)

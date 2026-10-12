@@ -1,7 +1,7 @@
 #ifndef PYTOAST_VELOCITIES_CUH
 #define PYTOAST_VELOCITIES_CUH
 
-#include <torch/extension.h>
+#include <torch/csrc/utils/pybind.h>
 
 void bind_velocities(py::module_& m);
 

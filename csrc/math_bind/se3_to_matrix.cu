@@ -9,10 +9,10 @@ DEFINE_KERNEL(launch_se3_to_matrix_3x4_fwd, {
     se3_type(q[offsets[1]], t[offsets[2]]).to_matrix_3x4(out + 3 * offsets[0]);
 })
 
-torch::Tensor se3_to_matrix_3x4_fwd(const torch::Tensor& q, const torch::Tensor& t) {
+at::Tensor se3_to_matrix_3x4_fwd(const at::Tensor& q, const at::Tensor& t) {
     auto sizes = q.sizes().vec();
     sizes.back() = 12;
-    auto out = torch::empty(sizes, q.options());
+    auto out = at::empty(sizes, q.options());
     auto iter = make_tensor_iterator({out}, {q, t});
     check_operand_last_dims(iter, {12, 4, 3});
     DISPATCH_KERNEL(launch_se3_to_matrix_3x4_fwd, vec4*, const quat_t*, const vec3*)
@@ -36,11 +36,11 @@ DEFINE_KERNEL(launch_se3_to_matrix_3x4_bwd, {
 })
 
 auto se3_to_matrix_3x4_bwd(
-    const torch::Tensor& q, const torch::Tensor& t,
-    const torch::Tensor& grad_mtx
+    const at::Tensor& q, const at::Tensor& t,
+    const at::Tensor& grad_mtx
 ) {
-    auto dq = torch::empty_like(q);
-    auto dt = torch::empty_like(t);
+    auto dq = at::empty_like(q);
+    auto dt = at::empty_like(t);
 
     auto grad_sizes = q.sizes().vec();
     grad_sizes.back() = 12;
@@ -59,10 +59,10 @@ DEFINE_KERNEL(launch_se3_to_matrix_4x4_fwd, {
     se3_type(q[offsets[1]], t[offsets[2]]).to_matrix_4x4(out + 4 * offsets[0]);
 })
 
-torch::Tensor se3_to_matrix_4x4_fwd(const torch::Tensor& q, const torch::Tensor& t) {
+at::Tensor se3_to_matrix_4x4_fwd(const at::Tensor& q, const at::Tensor& t) {
     auto sizes = q.sizes().vec();
     sizes.back() = 16;
-    auto out = torch::empty(sizes, q.options());
+    auto out = at::empty(sizes, q.options());
     auto iter = make_tensor_iterator({out}, {q, t});
     check_operand_last_dims(iter, {16, 4, 3});
     DISPATCH_KERNEL(launch_se3_to_matrix_4x4_fwd, vec4*, const quat_t*, const vec3*)
@@ -85,11 +85,11 @@ DEFINE_KERNEL(launch_se3_to_matrix_4x4_bwd, {
 })
 
 auto se3_to_matrix_4x4_bwd(
-    const torch::Tensor& q, const torch::Tensor& t,
-    const torch::Tensor& grad_mtx
+    const at::Tensor& q, const at::Tensor& t,
+    const at::Tensor& grad_mtx
 ) {
-    auto dq = torch::empty_like(q);
-    auto dt = torch::empty_like(t);
+    auto dq = at::empty_like(q);
+    auto dt = at::empty_like(t);
 
     auto grad_sizes = q.sizes().vec();
     grad_sizes.back() = 16;

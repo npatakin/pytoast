@@ -19,7 +19,7 @@ DEFINE_KERNEL(launch_se3_from_matrix_4x4_fwd, {
     out_t[offsets[1]] = result.t;
 })
 
-auto se3_from_matrix_fwd(const torch::Tensor& mtx) {
+auto se3_from_matrix_fwd(const at::Tensor& mtx) {
     const int64_t num_rows = mtx.size(-2);
     if (num_rows != 3 && num_rows != 4) {
         throw std::runtime_error("se3_from_matrix_fwd: mtx must be [..., 3, 4] or [..., 4, 4]");
@@ -30,8 +30,8 @@ auto se3_from_matrix_fwd(const torch::Tensor& mtx) {
 
     auto q_sizes = batch_sizes; q_sizes.push_back(4);
     auto t_sizes = batch_sizes; t_sizes.push_back(3);
-    auto out_q = torch::empty(q_sizes, mtx.options());
-    auto out_t = torch::empty(t_sizes, mtx.options());
+    auto out_q = at::empty(q_sizes, mtx.options());
+    auto out_t = at::empty(t_sizes, mtx.options());
 
     auto flat_sizes = batch_sizes;
     flat_sizes.push_back(num_rows * 4);
@@ -70,16 +70,16 @@ DEFINE_KERNEL(launch_se3_from_matrix_4x4_bwd, {
     );
 })
 
-torch::Tensor se3_from_matrix_bwd(
-    const torch::Tensor& mtx,
-    const torch::Tensor& grad_q, const torch::Tensor& grad_t
+at::Tensor se3_from_matrix_bwd(
+    const at::Tensor& mtx,
+    const at::Tensor& grad_q, const at::Tensor& grad_t
 ) {
     const int64_t num_rows = mtx.size(-2);
 
     auto flat_sizes = mtx.sizes().vec();
     flat_sizes.pop_back(); flat_sizes.back() = num_rows * 4;
     auto mtx_flat = mtx.reshape(flat_sizes);
-    auto grad_mtx_flat = torch::zeros(flat_sizes, mtx.options());
+    auto grad_mtx_flat = at::zeros(flat_sizes, mtx.options());
 
     auto iter = make_tensor_iterator({grad_mtx_flat}, {mtx_flat, grad_q, grad_t});
     check_operand_last_dims(iter, {num_rows * 4, num_rows * 4, 4, 3});

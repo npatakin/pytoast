@@ -9,8 +9,8 @@ DEFINE_KERNEL(launch_quat_apply_fwd, {
     out_ptr[offsets[0]] = q_ptr[offsets[1]].apply(p_ptr[offsets[2]]);
 })
 
-torch::Tensor quat_apply_fwd(const torch::Tensor& q, const torch::Tensor& p) {
-    auto out = torch::empty_like(p);
+at::Tensor quat_apply_fwd(const at::Tensor& q, const at::Tensor& p) {
+    auto out = at::empty_like(p);
     auto iter = make_tensor_iterator({out}, {q, p});
     check_operand_last_dims(iter, {3, 4, 3});
     DISPATCH_KERNEL(launch_quat_apply_fwd, vec3*, const quat_t*, const vec3*)
@@ -24,9 +24,9 @@ DEFINE_KERNEL(launch_quat_apply_bwd, {
     out_dp_ptr[offsets[1]] = dp;
 })
 
-auto quat_apply_bwd(const torch::Tensor& q, const torch::Tensor& p, const torch::Tensor& grad) {
-    auto grad_q = torch::empty_like(q);
-    auto grad_p = torch::empty_like(p);
+auto quat_apply_bwd(const at::Tensor& q, const at::Tensor& p, const at::Tensor& grad) {
+    auto grad_q = at::empty_like(q);
+    auto grad_p = at::empty_like(p);
     auto iter = make_tensor_iterator({grad_q, grad_p}, {q, p, grad});
     check_operand_last_dims(iter, {4, 3, 4, 3, 3});
     DISPATCH_KERNEL(launch_quat_apply_bwd, vec4*, vec3*, const quat_t*, const vec3*, const vec3*)
@@ -39,8 +39,8 @@ DEFINE_KERNEL(launch_quat_apply_inv_fwd, {
     out_ptr[offsets[0]] = q_ptr[offsets[1]].apply_inv(p_ptr[offsets[2]]);
 })
 
-torch::Tensor quat_apply_inv_fwd(const torch::Tensor& q, const torch::Tensor& p) {
-    auto out = torch::empty_like(p);
+at::Tensor quat_apply_inv_fwd(const at::Tensor& q, const at::Tensor& p) {
+    auto out = at::empty_like(p);
     auto iter = make_tensor_iterator({out}, {q, p});
     check_operand_last_dims(iter, {3, 4, 3});
     DISPATCH_KERNEL(launch_quat_apply_inv_fwd, vec3*, const quat_t*, const vec3*)
@@ -54,9 +54,9 @@ DEFINE_KERNEL(launch_quat_apply_inv_bwd, {
     out_dp_ptr[offsets[1]] = dp;
 })
 
-auto quat_apply_inv_bwd(const torch::Tensor& q, const torch::Tensor& p, const torch::Tensor& grad) {
-    auto grad_q = torch::empty_like(q);
-    auto grad_p = torch::empty_like(p);
+auto quat_apply_inv_bwd(const at::Tensor& q, const at::Tensor& p, const at::Tensor& grad) {
+    auto grad_q = at::empty_like(q);
+    auto grad_p = at::empty_like(p);
     auto iter = make_tensor_iterator({grad_q, grad_p}, {q, p, grad});
     check_operand_last_dims(iter, {4, 3, 4, 3, 3});
     DISPATCH_KERNEL(launch_quat_apply_inv_bwd, vec4*, vec3*, const quat_t*, const vec3*, const vec3*)

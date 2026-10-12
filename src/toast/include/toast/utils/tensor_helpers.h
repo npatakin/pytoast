@@ -1,7 +1,13 @@
 #ifndef TENSOR_HELPERS_H
 #define TENSOR_HELPERS_H
 
-#include <torch/torch.h>
+// ATen only, not <torch/torch.h> / <torch/extension.h>: the libtorch frontend
+// costs ~2.5 GB of RAM and ~30 s per nvcc translation unit.
+#include <ATen/core/Tensor.h>
+#include <ATen/TensorIterator.h>
+#include <ATen/ops/empty.h>
+#include <ATen/ops/empty_like.h>
+#include <ATen/ops/zeros.h>
 
 
 // Checks the last dimension size of each TensorIterator
@@ -50,15 +56,15 @@ void check_operand_last_dims(
 }
 
 
-inline bool check_same_dtype(const torch::Tensor& t) {
+inline bool check_same_dtype(const at::Tensor& t) {
     return true;
 }
 
 
 template <typename... Tensors>
 bool check_same_dtype(
-    const torch::Tensor& first,
-    const torch::Tensor& second,
+    const at::Tensor& first,
+    const at::Tensor& second,
     const Tensors&... rest
 ) {
     if (first.dtype() != second.dtype()) {
@@ -68,12 +74,12 @@ bool check_same_dtype(
 }
 
 inline void check_same_device() {}
-inline void check_same_device(const torch::Tensor& t) {}
+inline void check_same_device(const at::Tensor& t) {}
 
 template <typename... Tensors>
 void check_same_device(
-    const torch::Tensor& first,
-    const torch::Tensor& second,
+    const at::Tensor& first,
+    const at::Tensor& second,
     const Tensors&... rest
 ) {
     if (first.device() != second.device()) {
@@ -96,7 +102,7 @@ void check_same_device(const TensorList& ts) {
     }
 }
 
-inline void check_dtypes(const at::ScalarType& dtype, const torch::Tensor& t) {
+inline void check_dtypes(const at::ScalarType& dtype, const at::Tensor& t) {
     if (t.dtype() != dtype) {
         throw std::runtime_error("Dtype mismatch. Expected " +
             std::string(toString(dtype)) +
@@ -107,7 +113,7 @@ inline void check_dtypes(const at::ScalarType& dtype, const torch::Tensor& t) {
 template <typename... Tensors>
 void check_dtypes(
     const at::ScalarType& dtype,
-    const torch::Tensor& first,
+    const at::Tensor& first,
     const Tensors&... rest
 ) {
     check_dtypes(dtype, first);
@@ -125,12 +131,12 @@ void check_dtypes(const at::ScalarType& dtype, const TensorList& ts) {
     }
 }
 
-inline bool all_contiguous(const torch::Tensor& t) {
+inline bool all_contiguous(const at::Tensor& t) {
     return t.is_contiguous();
 }
 
 template <typename... Tensors>
-void all_contiguous(const torch::Tensor& first, const Tensors&... rest) {
+void all_contiguous(const at::Tensor& first, const Tensors&... rest) {
     if (!all_contiguous(first)) {
         throw std::runtime_error("all input tensors must be contiguous");
     }
@@ -166,7 +172,7 @@ auto map_to_pointers_cast(Args&&... args) {
 }
 
 inline void check_dtype_in(
-    const torch::Tensor& t,
+    const at::Tensor& t,
     const std::vector<at::ScalarType>& dtypes
 ) {
     const auto& check_dtype = t.dtype();
@@ -188,10 +194,10 @@ inline void check_dtype_in(
     }
 };
 
-inline torch::Tensor make_ptr_tensor(const std::vector<torch::Tensor>& tensors) {
-    auto ptr_tensor = torch::zeros(
+inline at::Tensor make_ptr_tensor(const std::vector<at::Tensor>& tensors) {
+    auto ptr_tensor = at::zeros(
         {static_cast<uint>(tensors.size())},
-        at::TensorOptions().dtype(torch::kInt64).device(torch::kCPU));
+        at::TensorOptions().dtype(at::kLong).device(at::kCPU));
 
     auto ptr_tensor_ptr = static_cast<char **>(ptr_tensor.data_ptr());
     for (uint i = 0; i != tensors.size(); ++i) {

@@ -8,10 +8,10 @@ DEFINE_KERNEL(launch_to_matrix_fwd, {
     q[offsets[1]].to_matrix(out + 3 * offsets[0]);
 })
 
-torch::Tensor quat_to_matrix_fwd(const torch::Tensor& q) {
+at::Tensor quat_to_matrix_fwd(const at::Tensor& q) {
     auto sizes = q.sizes().vec();
     sizes.back() = 9;
-    auto out = torch::empty(sizes, q.options());
+    auto out = at::empty(sizes, q.options());
     auto iter = make_tensor_iterator({out}, {q});
     check_operand_last_dims(iter, {9, 4});
     DISPATCH_KERNEL(launch_to_matrix_fwd, vec3*, const quat_t*)
@@ -27,8 +27,8 @@ DEFINE_KERNEL(launch_to_matrix_bwd, {
     out[offsets[0]] = CLS(q)::to_matrix_backward(q[offsets[1]], grad + 3 * offsets[2]);
 })
 
-torch::Tensor quat_to_matrix_bwd(const torch::Tensor& q, const torch::Tensor& grad_output) {
-    auto out = torch::empty_like(q);
+at::Tensor quat_to_matrix_bwd(const at::Tensor& q, const at::Tensor& grad_output) {
+    auto out = at::empty_like(q);
 
     auto grad_sizes = q.sizes().vec();
     grad_sizes.back() = 9;

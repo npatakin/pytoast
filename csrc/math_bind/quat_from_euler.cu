@@ -8,10 +8,10 @@ DEFINE_KERNEL(launch_from_euler_fwd, {
     out[offsets[0]] = CLS(out)::from_euler_angles(angles[offsets[1]]);
 })
 
-torch::Tensor quat_from_euler_angles_fwd(const torch::Tensor& euler_angles) {
+at::Tensor quat_from_euler_angles_fwd(const at::Tensor& euler_angles) {
     auto sizes = euler_angles.sizes().vec();
     sizes.back() = 4;
-    auto out = torch::empty(sizes, euler_angles.options());
+    auto out = at::empty(sizes, euler_angles.options());
     auto iter = make_tensor_iterator({out}, {euler_angles});
     check_operand_last_dims(iter, {4, 3});
     DISPATCH_KERNEL(launch_from_euler_fwd, quat_t*, const vec3*)
@@ -23,8 +23,8 @@ DEFINE_KERNEL(launch_from_euler_bwd, {
     out[offsets[0]] = CLS(grad)::from_euler_angles_bwd(angles[offsets[1]], grad[offsets[2]].q);
 })
 
-torch::Tensor quat_from_euler_angles_bwd(const torch::Tensor& euler_angles, const torch::Tensor& grad_output) {
-    auto out = torch::empty_like(euler_angles);
+at::Tensor quat_from_euler_angles_bwd(const at::Tensor& euler_angles, const at::Tensor& grad_output) {
+    auto out = at::empty_like(euler_angles);
     auto iter = make_tensor_iterator({out}, {euler_angles, grad_output});
     check_operand_last_dims(iter, {3, 3, 4});
     DISPATCH_KERNEL(launch_from_euler_bwd, vec3*, const vec3*, const quat_t*)

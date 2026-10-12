@@ -11,9 +11,9 @@ DEFINE_KERNEL(launch_se3_inverse_fwd, {
     out_t[offsets[1]] = result.t;
 })
 
-auto se3_inverse_fwd(const torch::Tensor& q, const torch::Tensor& t) {
-    auto out_q = torch::empty_like(q);
-    auto out_t = torch::empty_like(t);
+auto se3_inverse_fwd(const at::Tensor& q, const at::Tensor& t) {
+    auto out_q = at::empty_like(q);
+    auto out_t = at::empty_like(t);
     auto iter = make_tensor_iterator({out_q, out_t}, {q, t});
     check_operand_last_dims(iter, {4, 3, 4, 3});
     DISPATCH_KERNEL(launch_se3_inverse_fwd, quat_t*, vec3*, const quat_t*, const vec3*)
@@ -33,11 +33,11 @@ DEFINE_KERNEL(launch_se3_inverse_bwd, {
 })
 
 auto se3_inverse_bwd(
-    const torch::Tensor& q, const torch::Tensor& t,
-    const torch::Tensor& grad_q, const torch::Tensor& grad_t
+    const at::Tensor& q, const at::Tensor& t,
+    const at::Tensor& grad_q, const at::Tensor& grad_t
 ) {
-    auto out_q = torch::empty_like(q);
-    auto out_t = torch::empty_like(t);
+    auto out_q = at::empty_like(q);
+    auto out_t = at::empty_like(t);
     auto iter = make_tensor_iterator({out_q, out_t}, {q, t, grad_q, grad_t});
     check_operand_last_dims(iter, {4, 3, 4, 3, 4, 3});
     DISPATCH_KERNEL(launch_se3_inverse_bwd,

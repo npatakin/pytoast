@@ -8,11 +8,12 @@
 #include "motion_bind/interpolation.cuh"
 #include "motion_bind/trajectory.cuh"
 
-#include <torch/extension.h>
+#include <torch/csrc/utils/pybind.h>
+#include <ATen/ops/broadcast_to.h>
 
 
-std::pair<std::vector<torch::Tensor>, bool> broadcast_args(
-    const std::vector<torch::Tensor>& args,
+std::pair<std::vector<at::Tensor>, bool> broadcast_args(
+    const std::vector<at::Tensor>& args,
     const std::unordered_set<uint>& mtx_args,
     bool cast_to_feature_contiguous_dims
 ) {
@@ -78,7 +79,7 @@ std::pair<std::vector<torch::Tensor>, bool> broadcast_args(
         }
     }
 
-    std::vector<torch::Tensor> results;
+    std::vector<at::Tensor> results;
     results.reserve(args.size());
 
     for (uint i = 0; i < args.size(); ++i) {
@@ -91,7 +92,7 @@ std::pair<std::vector<torch::Tensor>, bool> broadcast_args(
         }
 
         // set feature dims
-        results.push_back(torch::broadcast_to(
+        results.push_back(at::broadcast_to(
             cast_to_contiguous[i] ? arg.contiguous() : arg, target_shape));
     }
 

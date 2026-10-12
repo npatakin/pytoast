@@ -8,8 +8,8 @@ DEFINE_KERNEL(launch_inverse_fwd, {
     outs[offsets[0]] = quats[offsets[1]].inverse();
 })
 
-auto quat_inverse_fwd(const torch::Tensor& q) {
-    auto out = torch::empty_like(q);
+auto quat_inverse_fwd(const at::Tensor& q) {
+    auto out = at::empty_like(q);
     auto iter = make_tensor_iterator({out}, {q});
     check_operand_last_dims(iter, {4, 4});
     DISPATCH_KERNEL(launch_inverse_fwd, quat_t*, const quat_t*)
@@ -21,8 +21,8 @@ DEFINE_KERNEL(launch_inverse_bwd, {
     outs[offsets[0]] = CLS(quats)::inverse_backward(quats[offsets[1]], grads[offsets[2]]);
 })
 
-auto quat_inverse_bwd(const torch::Tensor& q, const torch::Tensor& grad) {
-    auto out = torch::empty_like(q);
+auto quat_inverse_bwd(const at::Tensor& q, const at::Tensor& grad) {
+    auto out = at::empty_like(q);
     auto iter = make_tensor_iterator({out}, {q, grad});
     check_operand_last_dims(iter, {4, 4, 4});
     DISPATCH_KERNEL(launch_inverse_bwd, vec4*, const quat_t*, const vec4*)
@@ -35,8 +35,8 @@ DEFINE_KERNEL(launch_conjugate_fwd, {
     outs[offsets[0]] = quats[offsets[1]].conjugate();
 })
 
-auto quat_conjugate_fwd(const torch::Tensor& q) {
-    auto out = torch::empty_like(q);
+auto quat_conjugate_fwd(const at::Tensor& q) {
+    auto out = at::empty_like(q);
     auto iter = make_tensor_iterator({out}, {q});
     check_operand_last_dims(iter, {4, 4});
     DISPATCH_KERNEL(launch_conjugate_fwd, quat_t*, const quat_t*)
@@ -48,8 +48,8 @@ DEFINE_KERNEL(launch_conjugate_bwd, {
     outs[offsets[0]] = CLS(grads)::conjugate_backward(grads[offsets[2]].q);
 })
 
-auto quat_conjugate_bwd(const torch::Tensor& grad) {
-    auto out = torch::empty_like(grad);
+auto quat_conjugate_bwd(const at::Tensor& grad) {
+    auto out = at::empty_like(grad);
     auto iter = make_tensor_iterator({out}, {grad});
     check_operand_last_dims(iter, {4, 4});
     DISPATCH_KERNEL(launch_conjugate_bwd, vec4*, const quat_t*)

@@ -8,10 +8,10 @@ DEFINE_KERNEL(launch_quat_from_matrix_fwd, {
     out[offsets[0]] = CLS(out)::from_matrix(mtx + 3 * offsets[1]);
 })
 
-torch::Tensor quat_from_matrix_fwd(const torch::Tensor& mtx) {
+at::Tensor quat_from_matrix_fwd(const at::Tensor& mtx) {
     auto out_sizes = mtx.sizes().vec();
     out_sizes.pop_back(); out_sizes.back() = 4;
-    auto out = torch::empty(out_sizes, mtx.options());
+    auto out = at::empty(out_sizes, mtx.options());
 
     auto flat_sizes = mtx.sizes().vec();
     flat_sizes.pop_back(); flat_sizes.back() = 9;
@@ -29,12 +29,12 @@ DEFINE_KERNEL(launch_quat_from_matrix_bwd, {
     CLS(grad)::from_matrix_backward(mtx + 3 * offsets[1], grad[offsets[2]].q, d_mtx + 3 * offsets[0]);
 })
 
-torch::Tensor quat_from_matrix_bwd(const torch::Tensor& mtx, const torch::Tensor& grad_output) {
+at::Tensor quat_from_matrix_bwd(const at::Tensor& mtx, const at::Tensor& grad_output) {
     auto flat_sizes = mtx.sizes().vec();
     flat_sizes.pop_back(); flat_sizes.back() = 9;
 
     auto mtx_flat = mtx.reshape(flat_sizes);
-    auto d_mtx_flat = torch::empty(flat_sizes, mtx.options());
+    auto d_mtx_flat = at::empty(flat_sizes, mtx.options());
 
     auto iter = make_tensor_iterator({d_mtx_flat}, {mtx_flat, grad_output});
     check_operand_last_dims(iter, {9, 9, 4});

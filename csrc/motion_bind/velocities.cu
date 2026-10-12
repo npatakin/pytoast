@@ -20,15 +20,15 @@ DEFINE_KERNEL(launch_velocities_kernel_fwd, {
 
 
 auto velocities_fwd(
-    const torch::Tensor& q1,
-    const torch::Tensor& t1,
-    const torch::Tensor& q2,
-    const torch::Tensor& t2,
-    const torch::Tensor& left_time,
-    const torch::Tensor& right_time
+    const at::Tensor& q1,
+    const at::Tensor& t1,
+    const at::Tensor& q2,
+    const at::Tensor& t2,
+    const at::Tensor& left_time,
+    const at::Tensor& right_time
 ) {
-    auto out_linear = torch::empty_like(t1);
-    auto out_angular = torch::empty_like(t1);
+    auto out_linear = at::empty_like(t1);
+    auto out_angular = at::empty_like(t1);
     auto iter = make_tensor_iterator(
         {out_linear, out_angular},
         {q1, t1, q2, t2, left_time, right_time}
@@ -68,21 +68,21 @@ DEFINE_KERNEL(launch_velocities_kernel_bwd, {
 })
 
 auto velocities_bwd(
-    const torch::Tensor& q1,
-    const torch::Tensor& t1,
-    const torch::Tensor& q2,
-    const torch::Tensor& t2,
-    const torch::Tensor& left_time,
-    const torch::Tensor& right_time,
-    const torch::Tensor& d_linear,
-    const torch::Tensor& d_angular
+    const at::Tensor& q1,
+    const at::Tensor& t1,
+    const at::Tensor& q2,
+    const at::Tensor& t2,
+    const at::Tensor& left_time,
+    const at::Tensor& right_time,
+    const at::Tensor& d_linear,
+    const at::Tensor& d_angular
 ) {
-     auto dq1 = torch::empty_like(q1);
-     auto dt1 = torch::empty_like(t1);
-     auto dq2 = torch::empty_like(q2);
-     auto dt2 = torch::empty_like(t2);
-     auto dleft_time = torch::empty_like(left_time);
-     auto dright_time = torch::empty_like(right_time);
+     auto dq1 = at::empty_like(q1);
+     auto dt1 = at::empty_like(t1);
+     auto dq2 = at::empty_like(q2);
+     auto dt2 = at::empty_like(t2);
+     auto dleft_time = at::empty_like(left_time);
+     auto dright_time = at::empty_like(right_time);
 
     auto iter = make_tensor_iterator(
         {dq1, dt1, dq2, dt2, dleft_time, dright_time},
@@ -115,14 +115,14 @@ DEFINE_KERNEL(launch_apply_velocity_fwd, {
 })
 
 auto apply_velocity_fwd(
-    const torch::Tensor& q0,
-    const torch::Tensor& t0,
-    const torch::Tensor& v,
-    const torch::Tensor& w,
-    const torch::Tensor& delta_t
+    const at::Tensor& q0,
+    const at::Tensor& t0,
+    const at::Tensor& v,
+    const at::Tensor& w,
+    const at::Tensor& delta_t
 ) {
-    auto out_q = torch::empty_like(q0);
-    auto out_t = torch::empty_like(t0);
+    auto out_q = at::empty_like(q0);
+    auto out_t = at::empty_like(t0);
 
     auto iter = make_tensor_iterator({out_q, out_t}, {q0, t0, v, w, delta_t});
     check_operand_last_dims(iter, {4, 3, 4, 3, 3, 3, 1});
@@ -152,19 +152,19 @@ DEFINE_KERNEL(launch_apply_velocity_bwd, {
 })
 
 auto apply_velocity_bwd(
-    const torch::Tensor& q0,
-    const torch::Tensor& t0,
-    const torch::Tensor& v,
-    const torch::Tensor& w,
-    const torch::Tensor& delta_t,
-    const torch::Tensor& grad_q,
-    const torch::Tensor& grad_t
+    const at::Tensor& q0,
+    const at::Tensor& t0,
+    const at::Tensor& v,
+    const at::Tensor& w,
+    const at::Tensor& delta_t,
+    const at::Tensor& grad_q,
+    const at::Tensor& grad_t
 ) {
-    auto dq0 = torch::empty_like(q0);
-    auto dt0 = torch::empty_like(t0);
-    auto dv = torch::empty_like(v);
-    auto dw = torch::empty_like(w);
-    auto d_delta_t = torch::empty_like(delta_t);
+    auto dq0 = at::empty_like(q0);
+    auto dt0 = at::empty_like(t0);
+    auto dv = at::empty_like(v);
+    auto dw = at::empty_like(w);
+    auto d_delta_t = at::empty_like(delta_t);
 
     auto iter = make_tensor_iterator(
         {dq0, dt0, dv, dw, d_delta_t},
@@ -197,15 +197,15 @@ DEFINE_KERNEL(launch_apply_linear_motion_fwd, {
 
 
 auto linear_motion_transform_fwd(
-    const torch::Tensor& q0,
-    const torch::Tensor& t0,
-    const torch::Tensor& v,
-    const torch::Tensor& w,
-    const torch::Tensor& pose_time,
-    const torch::Tensor& points,
-    const torch::Tensor& points_time
+    const at::Tensor& q0,
+    const at::Tensor& t0,
+    const at::Tensor& v,
+    const at::Tensor& w,
+    const at::Tensor& pose_time,
+    const at::Tensor& points,
+    const at::Tensor& points_time
 ) {
-    auto out = torch::empty_like(points);
+    auto out = at::empty_like(points);
     auto iter = make_tensor_iterator(
         {out},
         {q0, t0, v, w, pose_time, points, points_time}
@@ -238,22 +238,22 @@ DEFINE_KERNEL(launch_apply_linear_motion_bwd, {
 
 
 auto linear_motion_transform_bwd(
-    const torch::Tensor& q0,
-    const torch::Tensor& t0,
-    const torch::Tensor& v,
-    const torch::Tensor& w,
-    const torch::Tensor& pose_time,
-    const torch::Tensor& points,
-    const torch::Tensor& points_time,
-    const torch::Tensor& grads
+    const at::Tensor& q0,
+    const at::Tensor& t0,
+    const at::Tensor& v,
+    const at::Tensor& w,
+    const at::Tensor& pose_time,
+    const at::Tensor& points,
+    const at::Tensor& points_time,
+    const at::Tensor& grads
 ) {
-    auto dq0 = torch::empty_like(q0);
-    auto dt0 = torch::empty_like(t0);
-    auto dv = torch::empty_like(v);
-    auto dw = torch::empty_like(w);
-    auto dpose_time = torch::empty_like(pose_time);
-    auto dpoint = torch::empty_like(points);
-    auto dpoint_time = torch::empty_like(points_time);
+    auto dq0 = at::empty_like(q0);
+    auto dt0 = at::empty_like(t0);
+    auto dv = at::empty_like(v);
+    auto dw = at::empty_like(w);
+    auto dpose_time = at::empty_like(pose_time);
+    auto dpoint = at::empty_like(points);
+    auto dpoint_time = at::empty_like(points_time);
 
     auto iter = make_tensor_iterator(
         {dq0, dt0, dv, dw, dpose_time, dpoint, dpoint_time},
@@ -277,11 +277,11 @@ DEFINE_KERNEL(launch_linear_velocity_fwd, {
 })
 
 auto linear_velocity_fwd(
-    const torch::Tensor& t1,
-    const torch::Tensor& t2,
-    const torch::Tensor& dt
+    const at::Tensor& t1,
+    const at::Tensor& t2,
+    const at::Tensor& dt
 ) {
-    auto out = torch::empty_like(t1);
+    auto out = at::empty_like(t1);
     auto iter = make_tensor_iterator({out}, {t1, t2, dt});
     check_operand_last_dims(iter, {3, 3, 3, 1});
     DISPATCH_KERNEL(launch_linear_velocity_fwd,
@@ -301,14 +301,14 @@ DEFINE_KERNEL(launch_linear_velocity_bwd, {
 })
 
 auto linear_velocity_bwd(
-    const torch::Tensor& t1,
-    const torch::Tensor& t2,
-    const torch::Tensor& dt,
-    const torch::Tensor& d_out
+    const at::Tensor& t1,
+    const at::Tensor& t2,
+    const at::Tensor& dt,
+    const at::Tensor& d_out
 ) {
-    auto dt1 = torch::empty_like(t1);
-    auto dt2 = torch::empty_like(t2);
-    auto ddt = torch::empty_like(dt);
+    auto dt1 = at::empty_like(t1);
+    auto dt2 = at::empty_like(t2);
+    auto ddt = at::empty_like(dt);
     auto iter = make_tensor_iterator({dt1, dt2, ddt}, {t1, t2, dt, d_out});
     check_operand_last_dims(iter, {3, 3, 1, 3, 3, 1, 3});
     DISPATCH_KERNEL_THREADS(launch_linear_velocity_bwd,
@@ -327,13 +327,13 @@ DEFINE_KERNEL(launch_angular_velocity_fwd, {
 })
 
 auto angular_velocity_fwd(
-    const torch::Tensor& q1,
-    const torch::Tensor& q2,
-    const torch::Tensor& dt
+    const at::Tensor& q1,
+    const at::Tensor& q2,
+    const at::Tensor& dt
 ) {
     auto sizes = q1.sizes().vec();
     sizes.back() = 3;
-    auto out = torch::empty(sizes, q1.options());
+    auto out = at::empty(sizes, q1.options());
     auto iter = make_tensor_iterator({out}, {q1, q2, dt});
     check_operand_last_dims(iter, {3, 4, 4, 1});
     DISPATCH_KERNEL(launch_angular_velocity_fwd,
@@ -353,14 +353,14 @@ DEFINE_KERNEL(launch_angular_velocity_bwd, {
 })
 
 auto angular_velocity_bwd(
-    const torch::Tensor& q1,
-    const torch::Tensor& q2,
-    const torch::Tensor& dt,
-    const torch::Tensor& d_out
+    const at::Tensor& q1,
+    const at::Tensor& q2,
+    const at::Tensor& dt,
+    const at::Tensor& d_out
 ) {
-    auto dq1 = torch::empty_like(q1);
-    auto dq2 = torch::empty_like(q2);
-    auto ddt = torch::empty_like(dt);
+    auto dq1 = at::empty_like(q1);
+    auto dq2 = at::empty_like(q2);
+    auto ddt = at::empty_like(dt);
     auto iter = make_tensor_iterator({dq1, dq2, ddt}, {q1, q2, dt, d_out});
     check_operand_last_dims(iter, {4, 4, 1, 4, 4, 1, 3});
     DISPATCH_KERNEL_THREADS(launch_angular_velocity_bwd,
@@ -379,11 +379,11 @@ DEFINE_KERNEL(launch_apply_angular_velocity_fwd, {
 })
 
 auto apply_angular_velocity_fwd(
-    const torch::Tensor& q0,
-    const torch::Tensor& w,
-    const torch::Tensor& delta_t
+    const at::Tensor& q0,
+    const at::Tensor& w,
+    const at::Tensor& delta_t
 ) {
-    auto out = torch::empty_like(q0);
+    auto out = at::empty_like(q0);
     auto iter = make_tensor_iterator({out}, {q0, w, delta_t});
     check_operand_last_dims(iter, {4, 4, 3, 1});
     DISPATCH_KERNEL(launch_apply_angular_velocity_fwd,
@@ -403,14 +403,14 @@ DEFINE_KERNEL(launch_apply_angular_velocity_bwd, {
 })
 
 auto apply_angular_velocity_bwd(
-    const torch::Tensor& q0,
-    const torch::Tensor& w,
-    const torch::Tensor& delta_t,
-    const torch::Tensor& d_quat
+    const at::Tensor& q0,
+    const at::Tensor& w,
+    const at::Tensor& delta_t,
+    const at::Tensor& d_quat
 ) {
-    auto dq0 = torch::empty_like(q0);
-    auto dw = torch::empty_like(w);
-    auto d_delta_t = torch::empty_like(delta_t);
+    auto dq0 = at::empty_like(q0);
+    auto dw = at::empty_like(w);
+    auto d_delta_t = at::empty_like(delta_t);
     auto iter = make_tensor_iterator({dq0, dw, d_delta_t}, {q0, w, delta_t, d_quat});
     check_operand_last_dims(iter, {4, 3, 1, 4, 3, 1, 4});
     DISPATCH_KERNEL_THREADS(launch_apply_angular_velocity_bwd,

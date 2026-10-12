@@ -14,11 +14,11 @@ DEFINE_KERNEL(launch_se3_compose_fwd, {
 })
 
 auto se3_compose_fwd(
-    const torch::Tensor& q1, const torch::Tensor& t1,
-    const torch::Tensor& q2, const torch::Tensor& t2
+    const at::Tensor& q1, const at::Tensor& t1,
+    const at::Tensor& q2, const at::Tensor& t2
 ) {
-    auto out_q = torch::empty_like(q1);
-    auto out_t = torch::empty_like(t1);
+    auto out_q = at::empty_like(q1);
+    auto out_t = at::empty_like(t1);
     auto iter = make_tensor_iterator({out_q, out_t}, {q1, t1, q2, t2});
     check_operand_last_dims(iter, {4, 3, 4, 3, 4, 3});
     DISPATCH_KERNEL(launch_se3_compose_fwd, quat_t*, vec3*, const quat_t*, const vec3*, const quat_t*, const vec3*)
@@ -41,14 +41,14 @@ DEFINE_KERNEL(launch_se3_compose_bwd, {
 })
 
 auto se3_compose_bwd(
-    const torch::Tensor& q1, const torch::Tensor& t1,
-    const torch::Tensor& q2, const torch::Tensor& t2,
-    const torch::Tensor& grad_q, const torch::Tensor& grad_t
+    const at::Tensor& q1, const at::Tensor& t1,
+    const at::Tensor& q2, const at::Tensor& t2,
+    const at::Tensor& grad_q, const at::Tensor& grad_t
 ) {
-    auto dq1 = torch::empty_like(q1);
-    auto dt1 = torch::empty_like(t1);
-    auto dq2 = torch::empty_like(q2);
-    auto dt2 = torch::empty_like(t2);
+    auto dq1 = at::empty_like(q1);
+    auto dt1 = at::empty_like(t1);
+    auto dq2 = at::empty_like(q2);
+    auto dt2 = at::empty_like(t2);
     auto iter = make_tensor_iterator({dq1, dt1, dq2, dt2}, {q1, t1, q2, t2, grad_q, grad_t});
     check_operand_last_dims(iter, {4, 3, 4, 3, 4, 3, 4, 3, 4, 3});
     DISPATCH_KERNEL(launch_se3_compose_bwd,

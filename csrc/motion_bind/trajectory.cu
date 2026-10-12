@@ -6,6 +6,8 @@
 #include <toast/utils/tensor_helpers.h>
 #include <toast/math/motion.h>
 
+#include <ATen/ExpandUtils.h>
+
 
 struct TrajParams {
     uint num_keyframes;
@@ -154,7 +156,7 @@ DEFINE_KERNEL_CAPTURE(launch_trajectory_fwd, {
 namespace {
 
 // (..., K, C) -> (..., Q, K*C) with stride 0 along Q.
-torch::Tensor as_block(const torch::Tensor& seq, int64_t num_queries, int64_t num_keyframes) {
+at::Tensor as_block(const at::Tensor& seq, int64_t num_queries, int64_t num_keyframes) {
     auto sizes = seq.sizes().vec();
     const int64_t channels = (seq.dim() == 0) ? 1 : sizes.back();
     // collapse the trailing (K, C) into one dimension
@@ -169,7 +171,7 @@ torch::Tensor as_block(const torch::Tensor& seq, int64_t num_queries, int64_t nu
 }
 
 // (..., K) -> (..., Q, K) with stride 0 along Q.  For 1-channel sequences.
-torch::Tensor as_block_1d(const torch::Tensor& seq, int64_t num_queries) {
+at::Tensor as_block_1d(const at::Tensor& seq, int64_t num_queries) {
     auto sizes = seq.sizes().vec();
     std::vector<int64_t> flat(sizes.begin(), sizes.end());
     flat.insert(flat.end() - 1, 1);
@@ -181,10 +183,10 @@ torch::Tensor as_block_1d(const torch::Tensor& seq, int64_t num_queries) {
 
 // A stand-in operand for something the caller did not supply.  One element,
 // expanded to the iteration shape, never dereferenced by the kernel.
-torch::Tensor dummy_like(
+at::Tensor dummy_like(
     const std::vector<int64_t>& batch_query_shape,
     int64_t last_dim,
-    const torch::TensorOptions& options
+    const at::TensorOptions& options
 ) {
     std::vector<int64_t> ones(batch_query_shape.size(), 1);
     ones.push_back(last_dim);
@@ -192,23 +194,23 @@ torch::Tensor dummy_like(
     sizes.push_back(last_dim);
     // empty, not zeros: the kernel never dereferences these, and a device-side
     // fill would cost more than the whole kernel at small problem sizes.
-    return torch::empty(ones, options).expand(sizes);
+    return at::empty(ones, options).expand(sizes);
 }
 
 }  // namespace
 
 
 std::tuple<
-    std::optional<torch::Tensor>, std::optional<torch::Tensor>,
-    std::optional<torch::Tensor>, std::optional<torch::Tensor>,
-    std::optional<torch::Tensor>, std::optional<torch::Tensor>
+    std::optional<at::Tensor>, std::optional<at::Tensor>,
+    std::optional<at::Tensor>, std::optional<at::Tensor>,
+    std::optional<at::Tensor>, std::optional<at::Tensor>
 >
 trajectory_fwd(
-    const torch::Tensor& query_times,          // (..., Q)
-    const torch::Tensor& seq_times,            // (..., K)
-    const std::optional<torch::Tensor>& seq_quats,   // (..., K, 4)
-    const std::optional<torch::Tensor>& seq_t,       // (..., K, 3)
-    const std::optional<torch::Tensor>& seq_mask,    // (..., K)
+    const at::Tensor& query_times,          // (..., Q)
+    const at::Tensor& seq_times,            // (..., K)
+    const std::optional<at::Tensor>& seq_quats,   // (..., K, 4)
+    const std::optional<at::Tensor>& seq_t,       // (..., K, 3)
+    const std::optional<at::Tensor>& seq_mask,    // (..., K)
     bool use_only_valid_keyframes,
     bool extrapolate,
     int64_t extrapolation_window,
@@ -245,7 +247,7 @@ trajectory_fwd(
     const bool has_mask = seq_mask.has_value();
 
     // Outputs.  Anything not asked for gets a one-element dummy.
-    std::optional<torch::Tensor> out_quat, out_t, out_mask, out_v, out_w, out_indices;
+    std::optional<at::Tensor> out_quat, out_t, out_mask, out_v, out_w, out_indices;
 
     // An unrequested output is a one-element tensor expanded to the iteration
     // shape, exactly like an absent input.  TensorIterator normally rejects a
@@ -253,19 +255,19 @@ trajectory_fwd(
     // check disabled; that is sound here only because the matching want_* flag
     // keeps the kernel from ever writing to it.  This avoids allocating (and
     // touching) full-size buffers nobody asked for.
-    auto make_out = [&](bool wanted, int64_t channels, const torch::TensorOptions& opts) {
+    auto make_out = [&](bool wanted, int64_t channels, const at::TensorOptions& opts) {
         auto sizes = iter_shape;
         sizes.push_back(channels);
-        return wanted ? torch::empty(sizes, opts)
+        return wanted ? at::empty(sizes, opts)
                       : dummy_like(iter_shape, channels, opts);
     };
 
     auto out_quat_t = make_out(has_quats, 4, float_opts);
     auto out_t_t = make_out(has_t, 3, float_opts);
-    auto out_mask_t = make_out(return_mask, 1, float_opts.dtype(torch::kBool));
+    auto out_mask_t = make_out(return_mask, 1, float_opts.dtype(at::kBool));
     auto out_v_t = make_out(return_velocities && has_t, 3, float_opts);
     auto out_w_t = make_out(return_velocities && has_quats, 3, float_opts);
-    auto out_idx_t = make_out(return_indices, 2, float_opts.dtype(torch::kInt32));
+    auto out_idx_t = make_out(return_indices, 2, float_opts.dtype(at::kInt));
 
     auto seq_quats_b = has_quats
         ? as_block(seq_quats->expand([&]{ auto s = batch_shape; s.push_back(num_keyframes); s.push_back(4); return s; }()),
@@ -278,11 +280,11 @@ trajectory_fwd(
     auto seq_mask_b = has_mask
         ? as_block_1d(seq_mask->expand([&]{ auto s = batch_shape; s.push_back(num_keyframes); return s; }()),
                       num_queries)
-        : dummy_like(iter_shape, 1, float_opts.dtype(torch::kBool));
+        : dummy_like(iter_shape, 1, float_opts.dtype(at::kBool));
 
 
     const bool masking_active = use_only_valid_keyframes && has_mask;
-    torch::Tensor extr_b;
+    at::Tensor extr_b;
     if (masking_active) {
         auto mask_flat = seq_mask->expand(
             [&]{ auto s = batch_shape; s.push_back(num_keyframes); return s; }()
@@ -294,7 +296,7 @@ trajectory_fwd(
         extr_b = extr.reshape(extr_shape).expand(
             [&]{ auto s = batch_shape; s.push_back(num_queries); s.push_back(4); return s; }());
     } else {
-        extr_b = dummy_like(iter_shape, 4, float_opts.dtype(torch::kInt32));
+        extr_b = dummy_like(iter_shape, 4, float_opts.dtype(at::kInt));
     }
 
     TrajParams params{
@@ -455,18 +457,18 @@ DEFINE_KERNEL_CAPTURE(launch_trajectory_bwd, {
 })
 
 
-std::tuple<torch::Tensor, torch::Tensor,
-           std::optional<torch::Tensor>, std::optional<torch::Tensor>>
+std::tuple<at::Tensor, at::Tensor,
+           std::optional<at::Tensor>, std::optional<at::Tensor>>
 trajectory_bwd(
-    const torch::Tensor& query_times,        // (..., Q)
-    const torch::Tensor& seq_times,          // (..., K)
-    const std::optional<torch::Tensor>& seq_quats,
-    const std::optional<torch::Tensor>& seq_t,
-    const torch::Tensor& ref_indices,        // (..., Q, 2) from the forward
-    const std::optional<torch::Tensor>& grad_quat,
-    const std::optional<torch::Tensor>& grad_t,
-    const std::optional<torch::Tensor>& grad_v,
-    const std::optional<torch::Tensor>& grad_w
+    const at::Tensor& query_times,        // (..., Q)
+    const at::Tensor& seq_times,          // (..., K)
+    const std::optional<at::Tensor>& seq_quats,
+    const std::optional<at::Tensor>& seq_t,
+    const at::Tensor& ref_indices,        // (..., Q, 2) from the forward
+    const std::optional<at::Tensor>& grad_quat,
+    const std::optional<at::Tensor>& grad_t,
+    const std::optional<at::Tensor>& grad_v,
+    const std::optional<at::Tensor>& grad_w
 ) {
     const int64_t num_queries = query_times.size(-1);
     const int64_t num_keyframes = seq_times.size(-1);
@@ -494,13 +496,13 @@ trajectory_bwd(
 
     // Gradient accumulators: real storage of keyframe shape, zeroed, then viewed
     // as a per-batch block expanded across the query axis.
-    auto d_seq_times_store = torch::zeros(with({num_keyframes}), opts);
-    auto d_seq_quats_store = has_quats ? torch::zeros(with({num_keyframes, 4}), opts)
-                                       : torch::Tensor();
-    auto d_seq_t_store = has_t ? torch::zeros(with({num_keyframes, 3}), opts)
-                               : torch::Tensor();
+    auto d_seq_times_store = at::zeros(with({num_keyframes}), opts);
+    auto d_seq_quats_store = has_quats ? at::zeros(with({num_keyframes, 4}), opts)
+                                       : at::Tensor();
+    auto d_seq_t_store = has_t ? at::zeros(with({num_keyframes, 3}), opts)
+                               : at::Tensor();
 
-    auto d_query_times = torch::empty(
+    auto d_query_times = at::empty(
         [&]{ auto s = iter_shape; s.push_back(1); return s; }(), opts);
 
     auto d_seq_times_b = as_block_1d(d_seq_times_store, num_queries);
@@ -546,7 +548,7 @@ trajectory_bwd(
         >(iter, std::make_tuple(params));
     });
 
-    std::optional<torch::Tensor> d_quats, d_t;
+    std::optional<at::Tensor> d_quats, d_t;
     if (has_quats) d_quats = d_seq_quats_store;
     if (has_t) d_t = d_seq_t_store;
     return {d_query_times.squeeze(-1), d_seq_times_store, d_quats, d_t};

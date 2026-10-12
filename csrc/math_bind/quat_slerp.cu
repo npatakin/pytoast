@@ -9,8 +9,8 @@ DEFINE_KERNEL(launch_slerp_fwd, {
     out_q[offsets[0]] = q1[offsets[1]].slerp(q2[offsets[2]], t[offsets[3]]);
 })
 
-torch::Tensor quat_slerp_fwd(const torch::Tensor& q1, const torch::Tensor& q2, const torch::Tensor& t) {
-    auto out = torch::empty_like(q1);
+at::Tensor quat_slerp_fwd(const at::Tensor& q1, const at::Tensor& q2, const at::Tensor& t) {
+    auto out = at::empty_like(q1);
     auto iter = make_tensor_iterator({out}, {q1, q2, t});
     check_operand_last_dims(iter, {4, 4, 4, 1});
     DISPATCH_KERNEL(launch_slerp_fwd, quat_t*, const quat_t*, const quat_t*, const scalar_t*)
@@ -28,14 +28,14 @@ DEFINE_KERNEL(launch_slerp_bwd, {
 })
 
 auto quat_slerp_bwd(
-    const torch::Tensor& q1,
-    const torch::Tensor& q2,
-    const torch::Tensor& t,
-    const torch::Tensor& grad_q
+    const at::Tensor& q1,
+    const at::Tensor& q2,
+    const at::Tensor& t,
+    const at::Tensor& grad_q
 ) {
-    auto dq1 = torch::empty_like(q1);
-    auto dq2 = torch::empty_like(q2);
-    auto dt = torch::empty_like(t);
+    auto dq1 = at::empty_like(q1);
+    auto dq2 = at::empty_like(q2);
+    auto dt = at::empty_like(t);
     auto iter = make_tensor_iterator({dq1, dq2, dt}, {q1, q2, t, grad_q});
     check_operand_last_dims(iter, {4, 4, 1, 4, 4, 1, 4});
 

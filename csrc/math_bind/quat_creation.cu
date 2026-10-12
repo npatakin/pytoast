@@ -8,10 +8,10 @@ DEFINE_KERNEL(launch_random_quat, {
     out[offsets[0]] = CLS(out)::random_from_uniform(r[offsets[1]]);
 })
 
-torch::Tensor random_quat_from_uniform(const torch::Tensor& rand_vals) {
+at::Tensor random_quat_from_uniform(const at::Tensor& rand_vals) {
     auto sizes = rand_vals.sizes().vec();
     sizes.back() = 4;
-    auto out = torch::empty(sizes, rand_vals.options());
+    auto out = at::empty(sizes, rand_vals.options());
     auto iter = make_tensor_iterator({out}, {rand_vals});
     check_operand_last_dims(iter, {4, 3});
     DISPATCH_KERNEL(launch_random_quat, quat_t*, const vec3*)
@@ -25,8 +25,8 @@ DEFINE_KERNEL(launch_quat_from_xyzw_fwd, {
     out[offsets[0]] = CLS(out)::from_xyzw(in_vec.x, in_vec.y, in_vec.z, in_vec.w);
 })
 
-torch::Tensor quat_from_xyzw_fwd(const torch::Tensor& xyzw) {
-    auto out = torch::empty_like(xyzw);
+at::Tensor quat_from_xyzw_fwd(const at::Tensor& xyzw) {
+    auto out = at::empty_like(xyzw);
     auto iter = make_tensor_iterator({out}, {xyzw});
     check_operand_last_dims(iter, {4, 4});
     DISPATCH_KERNEL(launch_quat_from_xyzw_fwd, quat_t*, const vec4*)
@@ -39,8 +39,8 @@ DEFINE_KERNEL(launch_quat_from_xyzw_bwd, {
     out[offsets[0]] = CLS(grad)::from_xyzw_backward(grad[offsets[1]].q);
 })
 
-torch::Tensor quat_from_xyzw_bwd(const torch::Tensor& grad_output) {
-    auto out = torch::empty_like(grad_output);
+at::Tensor quat_from_xyzw_bwd(const at::Tensor& grad_output) {
+    auto out = at::empty_like(grad_output);
     auto iter = make_tensor_iterator({out}, {grad_output});
     check_operand_last_dims(iter, {4, 4});
     DISPATCH_KERNEL(launch_quat_from_xyzw_bwd, vec4*, const quat_t*)
@@ -52,7 +52,7 @@ DEFINE_KERNEL(launch_quat_unit, {
     out_quat[offsets[0]] = CLS(out_quat)();
 })
 
-torch::Tensor quat_unit(const torch::Tensor& out) {
+at::Tensor quat_unit(const at::Tensor& out) {
     auto iter = make_tensor_iterator({out}, {}, {-1}, false);
     DISPATCH_KERNEL(launch_quat_unit, quat_t*)
     return out;
