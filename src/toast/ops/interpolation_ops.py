@@ -88,10 +88,16 @@ def sample_trajectory(
     where :math:`\ldots` is any common batch prefix.
     
     .. attention::
-    	``seq_times`` must be sorted in non-decreasing order along the last
-    	dimension; behaviour is undefined otherwise, and this is not verified.
-    	``query_times`` may be in any order -- each query is bracketed by an
-    	independent binary search.
+    	``seq_times`` must be sorted (non-decreasing) along the last dimension,
+    	**including masked keyframes**: the binary search runs over all
+    	timestamps and skips masked entries only afterwards. Order is not
+    	verified; violating it silently gives wrong results.
+
+    	Exception: with ``seq_mask`` and ``use_only_valid_keyframes=True``,
+    	masked padding before the first and after the last valid keyframe is
+    	never read and may hold any timestamp (e.g. zeros).
+
+    	``query_times`` may be in any order.
     
     .. caution::
     	Using ``seq_times`` with difference between neighbouring keyframes 
@@ -101,8 +107,8 @@ def sample_trajectory(
 
     Args:
         query_times: Query timestamps, shape :math:`(\ldots, Q)`. Any order. 
-        seq_times: Keyframe timestamps (monotonically increasing along the
-            last dimension), shape :math:`(\ldots, K)`.
+        seq_times: Keyframe timestamps, shape :math:`(\ldots, K)`. Sorted along
+            the last dimension, masked keyframes included (see above).
         seq_quats: Keyframe quaternions (WXYZ), shape :math:`(\ldots, K, 4)`.
             Pass ``None`` to skip rotation interpolation.
         seq_t: Keyframe translations, shape :math:`(\ldots, K, 3)`.

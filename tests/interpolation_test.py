@@ -58,6 +58,33 @@ class TrajectoryMaskedTest(TrajectorySampleTest):
     masked = True
 
 
+class TrajectoryPaddedTest(TrajectorySampleTest):
+    """Sequences of different length, padded to K with masked zero timestamps.
+
+    The padding breaks the sorted order of the row as a whole, so bracketing
+    must stay between the first and the last valid keyframe: searching into the
+    trailing zeros sends every query to the end of the row.
+    """
+    masked = True
+
+    def setup_args(self, dtype, device) -> list[torch.Tensor]:
+        args = super().setup_args(dtype, device)
+        seq_times, mask = args[1], args[4]
+        b, k = self.batch_shape, self.num_keyframes
+
+        # each element keeps keyframes [start, stop) and is padded around them
+        index = torch.arange(k, device=device).expand(*b, k)
+        start = torch.randint(0, k // 4, (*b, 1), device=device)
+        stop = torch.randint(k // 2, k + 1, (*b, 1), device=device)
+        padding = (index < start) | (index >= stop)
+
+        mask[index == start] = True         # both ends of the kept range valid
+        mask[index == stop - 1] = True
+        mask[padding] = False
+        seq_times[padding] = 0.0
+        return args
+
+
 class TrajectoryBatchDimsTest(TrajectorySampleTest):
     """Arbitrary batch dimensions -- the old kernel only accepted a flat batch."""
     batch_shape = (4, 5, 3)
@@ -114,4 +141,5 @@ __tests__ = [
     TrajectorySingleQueryTest,
     TrajectoryManyQueriesTest,
     TrajectoryKeyframeSpacingTest,
+    TrajectoryPaddedTest,
 ]

@@ -26,7 +26,7 @@ struct TrajParams {
 };
 
 
-// Largest index with time[idx] <= query, or -1.  seq_times must be sorted.
+// Largest index with time[idx] <= query, or -1.  time[0..n) must be sorted.
 template <typename T>
 HOSTDEVICE int last_le_index(const T* time, uint n, const T& query) {
     uint lo = 0, hi = n;
@@ -39,18 +39,31 @@ HOSTDEVICE int last_le_index(const T* time, uint n, const T& query) {
 }
 
 
-// Bracketing keyframes for one query: binary search, then walk outward to the
-// nearest valid keyframe on each side.  mask == nullptr means "all valid".
+// Bracketing keyframes for one query among keyframes [first, last]: binary
+// search, then walk outward to the nearest valid keyframe on each side.
+// mask == nullptr means "all valid".
+//
+// The search is bounded to [first, last] -- the first and the last valid
+// keyframe when masking -- rather than the whole row.  Rows are commonly padded
+// past their last keyframe with masked entries holding no real timestamp
+// (zeros); searching through those would break the sorted order the binary
+// search relies on and send every query to the end of the row.  Inside
+// [first, last] the timestamps must be sorted, masked ones included.
+//
+// Returns left < first for a query before the range and right > last for one
+// at or after its end.  Both ends being valid, the walks stay inside the range
+// otherwise.
 template <typename T>
 HOSTDEVICE int2 bracket_query(
-    const T* time, const bool* mask, uint num_keyframes, const T& query_time
+    const T* time, const bool* mask, int first, int last, const T& query_time
 ) {
-    int left = last_le_index(time, num_keyframes, query_time);
+    int left = first + last_le_index(
+        time + first, static_cast<uint>(last - first + 1), query_time);
     int right = left + 1;
 
     if (mask != nullptr) {
-        while (left >= 0 && !mask[left]) --left;
-        while (right < static_cast<int>(num_keyframes) && !mask[right]) ++right;
+        while (left >= first && !mask[left]) --left;
+        while (right <= last && !mask[right]) ++right;
     }
     return int2{left, right};
 }
@@ -74,26 +87,36 @@ DEFINE_KERNEL_CAPTURE(launch_trajectory_fwd, {
 
     const T query_time = query_times[offsets[6]];
 
-    int2 ref = bracket_query(time_base, bracket_mask, K, query_time);
-    if (ref.x < 0 || ref.y >= static_cast<int>(K)) {
-        // Query falls outside the sequence.  The boundary keyframe pairs depend
-        // only on the mask, so they are shared by every query in this batch
-        // element: either precomputed once by extrapolate_indices(), or a
-        // closed form when nothing is masked out.
-        int4 pairs;
-        if (params.has_extr) {
-            pairs = extr_pairs[offsets[11]];
-        } else {
-            const int last = static_cast<int>(K) - 1;
-            const int k = min(static_cast<int>(params.extrapolation_window), last);
-            pairs = int4{0, k, last - k, last};
+    // The boundary keyframe pairs (first valid, k-th valid from the start,
+    // k-th valid from the end, last valid) depend only on the mask, so they are
+    // shared by every query in this batch element: either precomputed once by
+    // extrapolate_indices(), or a closed form when nothing is masked out.  All
+    // four are -1 when the element has no valid keyframe.
+    int4 pairs;
+    if (params.has_extr) {
+        pairs = extr_pairs[offsets[11]];
+    } else {
+        const int last = static_cast<int>(K) - 1;
+        const int k = min(static_cast<int>(params.extrapolation_window), last);
+        pairs = int4{0, k, last - k, last};
+    }
+    const int first_keyframe = pairs.x;
+    const int last_keyframe = pairs.w;
+
+    int2 ref = int2{-1, -1};
+    if (first_keyframe >= 0) {
+        ref = bracket_query(
+            time_base, bracket_mask, first_keyframe, last_keyframe, query_time);
+
+        if (ref.x < first_keyframe || ref.y > last_keyframe) {
+            // Query falls outside the sequence.
+            const bool before = ref.x < first_keyframe;
+            if (!params.extrapolate) {
+                // clamp to the boundary pose rather than extrapolating through it
+                pairs = int4{pairs.x, pairs.x, pairs.w, pairs.w};
+            }
+            ref = before ? int2{pairs.x, pairs.y} : int2{pairs.z, pairs.w};
         }
-        if (!params.extrapolate) {
-            // clamp to the boundary pose rather than extrapolating through it
-            pairs = int4{pairs.x, pairs.x, pairs.w, pairs.w};
-        }
-        if (ref.x < 0) ref = int2{pairs.x, pairs.y};
-        else ref = int2{pairs.z, pairs.w};
     }
 
     if (params.want_indices) out_idx[offsets[5]] = ref;
