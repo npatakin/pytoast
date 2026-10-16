@@ -19,6 +19,7 @@ from quat_tests import __tests__ as quat_tests
 from se3_tests import __tests__ as se3_tests
 from velocities_test import __tests__ as velocity_tests
 from interpolation_test import __tests__ as interpolation_tests
+from trajectory_layout_test import __tests__ as trajectory_layout_tests
 
 
 SEPARATOR = '=' * 78
@@ -69,7 +70,7 @@ def print_summary(reports: list, failures: list) -> None:
 
 def main() -> int:
     torch.manual_seed(42)
-    tests = quat_tests + se3_tests + velocity_tests + interpolation_tests
+    tests = quat_tests + se3_tests + velocity_tests + interpolation_tests + trajectory_layout_tests
 
     reports = []
     failures = []

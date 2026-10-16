@@ -23,6 +23,9 @@ CUDA_EXTRA_ARGS = {
         "-D__CUDA_NO_HALF_CONVERSIONS__",
         "-D__CUDA_NO_HALF2_OPERATORS__",
         "--extended-lambda",
+        # Calling a host-only function from device code is only a warning in templates,
+        # and the device code then silently computes nothing. Make it an error.
+        "--diag-error=20011",
         "-O3",
         '-DAT_PARALLEL_OPENMP',
         "-Xcompiler", "-fopenmp"

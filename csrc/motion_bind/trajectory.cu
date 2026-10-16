@@ -223,6 +223,30 @@ at::Tensor dummy_like(
 }  // namespace
 
 
+// The kernels find a row of an operand as its base pointer plus the row index
+// times the row size, and load whole vectors from it. That works when the row
+// (the last `row_dims` dimensions) is stored contiguously, every batch stride is
+// a multiple of the row size (or 0, for a broadcast operand) and the data is
+// aligned for the vector type. Any other layout is copied into one that is.
+at::Tensor kernel_layout(const at::Tensor& t, int64_t row_dims, int64_t alignment) {
+    bool fits = t.stride(-1) == 1;
+    int64_t row_size = 1;
+    for (int64_t d = t.dim() - 1; d >= t.dim() - row_dims; --d) {
+        fits &= t.size(d) == 1 || t.stride(d) == row_size;
+        row_size *= t.size(d);
+    }
+    for (int64_t d = 0; d < t.dim() - row_dims; ++d) {
+        fits &= t.size(d) == 1 || t.stride(d) == 0 || (row_size > 0 && t.stride(d) % row_size == 0);
+    }
+    fits &= reinterpret_cast<uintptr_t>(t.data_ptr()) % alignment == 0;
+    return fits ? t : t.clone(at::MemoryFormat::Contiguous);
+}
+
+// Alignment of a quaternion in memory: the kernels load it as one vec4.
+int64_t quat_alignment(const at::Tensor& t) {
+    return t.scalar_type() == at::kDouble ? alignof(Float64::vec4) : alignof(Float32::vec4);
+}
+
 std::tuple<
     std::optional<at::Tensor>, std::optional<at::Tensor>,
     std::optional<at::Tensor>, std::optional<at::Tensor>,
@@ -230,10 +254,10 @@ std::tuple<
 >
 trajectory_fwd(
     const at::Tensor& query_times,          // (..., Q)
-    const at::Tensor& seq_times,            // (..., K)
-    const std::optional<at::Tensor>& seq_quats,   // (..., K, 4)
-    const std::optional<at::Tensor>& seq_t,       // (..., K, 3)
-    const std::optional<at::Tensor>& seq_mask,    // (..., K)
+    const at::Tensor& seq_times_in,         // (..., K)
+    const std::optional<at::Tensor>& seq_quats_in,   // (..., K, 4)
+    const std::optional<at::Tensor>& seq_t_in,       // (..., K, 3)
+    const std::optional<at::Tensor>& seq_mask_in,    // (..., K)
     bool use_only_valid_keyframes,
     bool extrapolate,
     int64_t extrapolation_window,
@@ -243,7 +267,24 @@ trajectory_fwd(
     bool return_mask
 ) {
     TORCH_CHECK(query_times.dim() >= 1, "query_times must have at least 1 dimension");
-    TORCH_CHECK(seq_times.dim() >= 1, "seq_times must have at least 1 dimension");
+    TORCH_CHECK(seq_times_in.dim() >= 1, "seq_times must have at least 1 dimension");
+    TORCH_CHECK(seq_times_in.size(-1) > 0, "seq_times must have at least one keyframe");
+    TORCH_CHECK(extrapolation_window >= 1, "extrapolation_window must be at least 1, got ", extrapolation_window);
+    // The kernels read every operand with the dtype of seq_times.
+    const auto dtype = seq_times_in.scalar_type();
+    TORCH_CHECK(dtype == at::kFloat || dtype == at::kDouble, "seq_times must be float32 or float64");
+    TORCH_CHECK(query_times.scalar_type() == dtype, "query_times must have the dtype of seq_times");
+    TORCH_CHECK(!seq_quats_in || seq_quats_in->scalar_type() == dtype, "seq_quats must have the dtype of seq_times");
+    TORCH_CHECK(!seq_t_in || seq_t_in->scalar_type() == dtype, "seq_t must have the dtype of seq_times");
+    TORCH_CHECK(!seq_mask_in || seq_mask_in->scalar_type() == at::kBool, "seq_mask must be a bool tensor");
+
+    const auto seq_times = kernel_layout(seq_times_in, 1, seq_times_in.element_size());
+    const std::optional<at::Tensor> seq_quats = seq_quats_in
+        ? std::optional(kernel_layout(*seq_quats_in, 2, quat_alignment(*seq_quats_in))) : std::nullopt;
+    const std::optional<at::Tensor> seq_t = seq_t_in
+        ? std::optional(kernel_layout(*seq_t_in, 2, seq_t_in->element_size())) : std::nullopt;
+    const std::optional<at::Tensor> seq_mask = seq_mask_in
+        ? std::optional(kernel_layout(*seq_mask_in, 1, 1)) : std::nullopt;
 
     const int64_t num_queries = query_times.size(-1);
     const int64_t num_keyframes = seq_times.size(-1);
@@ -309,9 +350,11 @@ trajectory_fwd(
     const bool masking_active = use_only_valid_keyframes && has_mask;
     at::Tensor extr_b;
     if (masking_active) {
+        // One contiguous row per batch element: extrapolate_indices walks it
+        // with a plain pointer, so a broadcast mask must be materialized.
         auto mask_flat = seq_mask->expand(
             [&]{ auto s = batch_shape; s.push_back(num_keyframes); return s; }()
-        ).reshape({-1, num_keyframes});
+        ).reshape({-1, num_keyframes}).contiguous();
         auto extr = extrapolate_indices(mask_flat, static_cast<uint>(extrapolation_window));
         auto extr_shape = batch_shape;
         extr_shape.push_back(1);
@@ -407,7 +450,9 @@ DEFINE_KERNEL_CAPTURE(launch_trajectory_bwd, {
         const T delta_time = right_time - left_time;
         const bool valid_delta = delta_time > dtype::eps;
         const T rel_time = valid_delta ? (query_time - left_time) / delta_time : T(0.5);
-        const T delta_time2 = dtype::max(delta_time * delta_time, dtype::eps);
+        // Only used when valid_delta, so the gap is above eps and needs no clamp.
+        // Clamping the square to eps distorted gradients for gaps below sqrt(eps).
+        const T delta_time2 = delta_time * delta_time;
 
         T d_rel_time = T(0);
         T d_delta_time = T(0);
@@ -484,15 +529,29 @@ std::tuple<at::Tensor, at::Tensor,
            std::optional<at::Tensor>, std::optional<at::Tensor>>
 trajectory_bwd(
     const at::Tensor& query_times,        // (..., Q)
-    const at::Tensor& seq_times,          // (..., K)
-    const std::optional<at::Tensor>& seq_quats,
-    const std::optional<at::Tensor>& seq_t,
+    const at::Tensor& seq_times_in,       // (..., K)
+    const std::optional<at::Tensor>& seq_quats_in,
+    const std::optional<at::Tensor>& seq_t_in,
     const at::Tensor& ref_indices,        // (..., Q, 2) from the forward
-    const std::optional<at::Tensor>& grad_quat,
-    const std::optional<at::Tensor>& grad_t,
-    const std::optional<at::Tensor>& grad_v,
-    const std::optional<at::Tensor>& grad_w
+    const std::optional<at::Tensor>& grad_quat_in,
+    const std::optional<at::Tensor>& grad_t_in,
+    const std::optional<at::Tensor>& grad_v_in,
+    const std::optional<at::Tensor>& grad_w_in
 ) {
+    // Gradients arrive in whatever layout autograd produced, e.g. slices of a
+    // concatenation, so they get the same treatment as the inputs.
+    const auto layout = [](const std::optional<at::Tensor>& t, int64_t row_dims, int64_t alignment) {
+        return t ? std::optional(kernel_layout(*t, row_dims, alignment)) : std::nullopt;
+    };
+    const auto elem = seq_times_in.element_size();
+    const auto seq_times = kernel_layout(seq_times_in, 1, elem);
+    const auto seq_quats = layout(seq_quats_in, 2, quat_alignment(seq_times_in));
+    const auto seq_t = layout(seq_t_in, 2, elem);
+    const auto grad_quat = layout(grad_quat_in, 1, quat_alignment(seq_times_in));
+    const auto grad_t = layout(grad_t_in, 1, elem);
+    const auto grad_v = layout(grad_v_in, 1, elem);
+    const auto grad_w = layout(grad_w_in, 1, elem);
+
     const int64_t num_queries = query_times.size(-1);
     const int64_t num_keyframes = seq_times.size(-1);
 

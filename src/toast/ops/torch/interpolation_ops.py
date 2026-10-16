@@ -7,6 +7,12 @@ from .quat_ops import quat_slerp
 from .motion_ops import angular_velocity
 
 
+# Smallest gap between bracketing keyframes that is not degenerate: dtype::eps
+# of the kernels (toast/math/scalar.h). A smaller gap gets rel_time 0.5 and zero
+# velocities.
+DEGENERATE_GAP = {torch.float32: 1e-6, torch.float64: 1e-12}
+
+
 def mask_indices(masks: torch.Tensor, num_valid_frames_clamped: torch.Tensor):
     mask_cumsum = masks.cumsum(dim=-1)
     first_valid = masks.int().argmax(dim=-1)
@@ -61,7 +67,11 @@ def find_bracketing_indices(
         timestamps,
         torch.full_like(timestamps, -float('inf'))
     )
-    left_idx = left_vals.argmax(dim=-1)  # [..., Q]
+    # argmax returns the first of equal maxima. The last one is wanted, like
+    # searchsorted(right=True) and the kernels: with duplicated timestamps the
+    # query lies past all of them.
+    num_keyframes = left_vals.shape[-1]
+    left_idx = (num_keyframes - 1) - left_vals.flip(dims=[-1]).argmax(dim=-1)  # [..., Q]
     left_exists = left_valid.any(dim=-1)
     left_idx = torch.where(
         left_exists,
@@ -130,6 +140,19 @@ def sample_trajectory(
     # print('query:', query_times)
     # print('seq_times:', seq_times)
     # print('seq_mask:', seq_mask)
+    # Every operand gets the full batch shape, as in the kernels. The indexing
+    # below (take_along_dim, searchsorted) does not broadcast.
+    batch = torch.broadcast_shapes(query_times.shape[:-1], seq_times.shape[:-1])
+    num_keyframes = seq_times.shape[-1]
+    query_times = query_times.expand(*batch, query_times.shape[-1])
+    seq_times = seq_times.expand(*batch, num_keyframes)
+    if seq_quats is not None:
+        seq_quats = seq_quats.expand(*batch, num_keyframes, 4)
+    if seq_t is not None:
+        seq_t = seq_t.expand(*batch, num_keyframes, 3)
+    if seq_mask is not None:
+        seq_mask = seq_mask.expand(*batch, num_keyframes)
+
     extr_indices = interpolation_corners_torch(
         times=seq_times, masks=seq_mask,
         extrapolate_window=extrapolation_window,
@@ -147,10 +170,9 @@ def sample_trajectory(
         )
     else:
         # print('searchsorted')
-        num_keyframes = seq_times.shape[-1]
         # right=True so an exact match lands in the LEFT bracket, matching
         # find_bracketing_indices above and both fused kernels.
-        right_idx = torch.searchsorted(seq_times, query_times, right=True)
+        right_idx = torch.searchsorted(seq_times.contiguous(), query_times.contiguous(), right=True)
         left_idx = right_idx - 1
         right_idx[right_idx == num_keyframes] = -1
 
@@ -180,11 +202,13 @@ def sample_trajectory(
     # print('left_time:', left_time.shape, left_time)
     # print('right_time:', right_time.shape, right_time)
     delta_time = right_time - left_time
-    delta_bad_mask = (delta_time < torch.finfo(delta_time.dtype).eps) | invalid_mask
-    rel_time_enum = query_times - left_time
-    rel_time = rel_time_enum / delta_time
-    rel_time[delta_bad_mask] = 0.5
-    delta_time = delta_time.clamp_min(1e-6)
+    delta_bad_mask = (delta_time <= DEGENERATE_GAP[delta_time.dtype]) | invalid_mask
+    # Divide by 1 where the gap is degenerate. Dividing by the gap and replacing
+    # the result afterwards would keep the forward right, but the backward of the
+    # division would still compute 0 / 0 there and produce NaN gradients.
+    delta_time = torch.where(delta_bad_mask, torch.ones_like(delta_time), delta_time)
+    rel_time = torch.where(
+        delta_bad_mask, torch.full_like(delta_time, 0.5), (query_times - left_time) / delta_time)
 
     out_quats = None
     out_t = None
@@ -209,7 +233,7 @@ def sample_trajectory(
 
         if return_velocities:
             out_w = angular_velocity(left_q, right_q, delta_time.unsqueeze(-1))
-            out_w[delta_bad_mask] = 0
+            out_w = torch.where(delta_bad_mask.unsqueeze(-1), torch.zeros_like(out_w), out_w)
 
     if seq_t is not None:
         left_t = seq_t.take_along_dim(left_idx, dim=-2)
@@ -217,7 +241,7 @@ def sample_trajectory(
         out_t = torch.lerp(left_t, right_t, rel_time.unsqueeze(-1))
         if return_velocities:
             out_v = (right_t - left_t) / delta_time.unsqueeze(-1)
-            out_v[delta_bad_mask] = 0
+            out_v = torch.where(delta_bad_mask.unsqueeze(-1), torch.zeros_like(out_v), out_v)
         out_t[invalid_mask] = 0
 
     if return_mask:

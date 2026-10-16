@@ -77,6 +77,18 @@ def sample_trajectory(
 ):
     assert mask_mode in ['and', 'or']
 
+    # Without gradients the C++ forward is called directly:
+    # going through the autograd function costs more than the kernels themselves.
+    if not torch.is_grad_enabled() or not any(
+            t is not None and t.requires_grad
+            for t in (query_times, seq_times, seq_quats, seq_t)):
+        out_quat, out_t, out_mask, out_v, out_w, out_indices = trajectory_fwd(
+            query_times, seq_times, seq_quats, seq_t, seq_mask,
+            use_only_valid_keyframes, extrapolate, extrapolation_window,
+            mask_mode == 'and', return_velocities, return_indices, return_mask,
+        )
+        return out_quat, out_t, out_mask, out_v, out_w, out_indices if return_indices else None
+
     return SampleTrajectory.apply(
         query_times,
         seq_times,

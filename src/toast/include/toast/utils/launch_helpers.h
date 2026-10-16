@@ -146,11 +146,20 @@ template <uint num_args>
 auto make_offset_calc(const at::TensorIterator& iter){
     auto offset_calc =
         make_element_offset_calculator<num_args>(iter);
+    // Kernels index an operand in units of its last dimension: a typed pointer to
+    // a whole vector, or a row of keyframes. A stride that is not a multiple of it
+    // would land in the middle of another row, so such layouts are rejected.
     for (uint op_idx = 0; op_idx < num_args; ++op_idx) {
-        auto last_dim = iter.tensor(op_idx).size(-1);
+        const auto last_dim = iter.tensor(op_idx).size(-1);
+        if (last_dim == 0) {
+            continue;
+        }
         for (uint i = 0; i != offset_calc.dims; ++i) {
+            TORCH_CHECK(offset_calc.strides_[i][op_idx] % last_dim == 0,
+                "operand ", op_idx, " has a stride of ", offset_calc.strides_[i][op_idx],
+                " elements, not a multiple of its last dimension ", last_dim,
+                "; make it contiguous");
             offset_calc.strides_[i][op_idx] /= last_dim;
-            // printf("op=%d dim=%d stride=%d\n", op_idx, i, offset_calc.strides_[i][op_idx]);
         }
     }
     return offset_calc;
@@ -180,6 +189,26 @@ struct same_offsets {
     }
 };
 
+
+// Kernels load each operand through a typed pointer, e.g. a float4 for a
+// quaternion. A misaligned pointer makes such a load fault on the GPU.
+template <typename... Ptrs>
+void check_aligned(const std::tuple<Ptrs...>& ptrs) {
+    int op_idx = 0;
+    const auto check_one = [&](const auto* ptr) {
+        using T = std::remove_pointer_t<std::decay_t<decltype(ptr)>>;
+        TORCH_CHECK(reinterpret_cast<uintptr_t>(ptr) % alignof(T) == 0,
+            "operand ", op_idx, " is not aligned for its vector type; make it contiguous");
+        ++op_idx;
+    };
+    std::apply([&](const auto&... ptr) { (check_one(ptr), ...); }, ptrs);
+}
+
+// The CUDA kernels count iteration points and offsets in 32 bits.
+inline void check_32bit_indexing(const at::TensorIterator& iter) {
+    TORCH_CHECK(iter.can_use_32bit_indexing(),
+        "the operation has too many elements for 32-bit indexing (", iter.numel(), " iteration points)");
+}
 
 inline at::TensorIterator make_tensor_iterator(
     const std::vector<at::Tensor>& outputs,
@@ -277,18 +306,24 @@ inline bool all_contiguous(const at::TensorIterator& iter) {
         TORCH_CHECK(false, TOAST_NO_CUDA_SUPPORT_MSG);
 
 
+// The kernels below launch one thread per iteration point, iter.numel().
+// TensorIterator's num_output_elements() would skip every dimension in which the
+// first output has stride 0: it is meant for reductions. An output nobody asked
+// for is such a stride-0 dummy, and only part of the batch would be computed.
 #ifdef TOAST_WITH_CUDA
 
 #define DEFINE_KERNEL(kernel_name, ...)  \
 template <int Threads, typename ...PtrsType> \
 void kernel_name(at::TensorIterator& iter) { \
-    const auto num_elements = iter.num_output_elements(); \
+    const auto num_elements = iter.numel(); \
     const bool ctg = all_contiguous(iter); \
 \
     if (iter.device().is_cpu()) {\
         TOAST_KERNEL_CPU_BODY([], __VA_ARGS__)\
     } else {\
+        check_32bit_indexing(iter);\
         const auto ptrs = tensor_ptrs<PtrsType...>(iter);\
+        check_aligned(ptrs);\
         if (!ctg) {\
             auto offset_calc = make_offset_calc<tuple_length_v<decltype(ptrs)>>(iter);\
             launch_linear_kernel_cuda<Threads>(num_elements, iter.device(), [ptrs, offset_calc] CULAMBDA (uint idx) {\
@@ -309,7 +344,7 @@ void kernel_name(at::TensorIterator& iter) { \
 #define DEFINE_KERNEL(kernel_name, ...)  \
 template <int Threads, typename ...PtrsType> \
 void kernel_name(at::TensorIterator& iter) { \
-    const auto num_elements = iter.num_output_elements(); \
+    const auto num_elements = iter.numel(); \
     const bool ctg = all_contiguous(iter); \
 \
     if (iter.device().is_cpu()) {\
@@ -344,13 +379,15 @@ void kernel_name(at::TensorIterator& iter) { \
 #define DEFINE_KERNEL_CAPTURE(kernel_name, ...)  \
 template <int Threads, int Grain, typename CapturesTuple, typename ...PtrsType> \
 void kernel_name(at::TensorIterator& iter, CapturesTuple captures) { \
-    const auto num_elements = iter.num_output_elements(); \
+    const auto num_elements = iter.numel(); \
     const bool ctg = all_contiguous(iter); \
 \
     if (iter.device().is_cpu()) {\
         TOAST_KERNEL_CPU_BODY_GRAIN([captures], Grain, __VA_ARGS__)\
     } else {\
+        check_32bit_indexing(iter);\
         const auto ptrs = tensor_ptrs<PtrsType...>(iter);\
+        check_aligned(ptrs);\
         if (!ctg) {\
             auto offset_calc = make_offset_calc<tuple_length_v<decltype(ptrs)>>(iter);\
             launch_linear_kernel_cuda<Threads>(num_elements, iter.device(), [ptrs, offset_calc, captures] CULAMBDA (uint idx) {\
@@ -371,7 +408,7 @@ void kernel_name(at::TensorIterator& iter, CapturesTuple captures) { \
 #define DEFINE_KERNEL_CAPTURE(kernel_name, ...)  \
 template <int Threads, int Grain, typename CapturesTuple, typename ...PtrsType> \
 void kernel_name(at::TensorIterator& iter, CapturesTuple captures) { \
-    const auto num_elements = iter.num_output_elements(); \
+    const auto num_elements = iter.numel(); \
     const bool ctg = all_contiguous(iter); \
 \
     if (iter.device().is_cpu()) {\

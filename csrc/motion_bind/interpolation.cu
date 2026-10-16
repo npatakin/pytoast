@@ -29,7 +29,7 @@ __global__ void extrapolate_indices_cuda(
 
     extrapolate_indices[batch_element_idx] = find_positions_bitpacked(num_keyframes, extrapolate_window, [&](uint pack_offset) {
         const uint element_idx = pack_offset + laneIdx;
-        const bool cur_mask_value = (element_idx < num_keyframes) ? masks[element_idx] : false;
+        const bool cur_mask_value = (element_idx < num_keyframes) && masks[element_idx];
         return __ballot_sync(0xFFFFFFFF, cur_mask_value);
     });
 }
@@ -37,11 +37,19 @@ __global__ void extrapolate_indices_cuda(
 #endif // TOAST_WITH_CUDA
 
 
-at::Tensor extrapolate_indices(const at::Tensor& masks, uint extrapolate_window) {
+at::Tensor extrapolate_indices(const at::Tensor& masks_in, uint extrapolate_window) {
+    TORCH_CHECK(masks_in.dim() == 2, "masks must be [batch, keyframes]");
+    TORCH_CHECK(masks_in.scalar_type() == at::kBool, "masks must be a bool tensor");
+    // Both kernels walk one row per batch element with a plain pointer.
+    const auto masks = masks_in.contiguous();
     const uint batch_size = masks.size(0);
     const uint num_keyframes = masks.size(1);
 
     auto out = at::empty({batch_size, 4}, at::TensorOptions().device(masks.device()).dtype(at::kInt));
+    if (batch_size == 0) {
+        // A grid of zero blocks is an invalid launch configuration.
+        return out;
+    }
 
     auto masks_ptr = (const bool*)masks.data_ptr();
     auto out_ptr = (int4*)out.data_ptr();
@@ -71,7 +79,7 @@ at::Tensor extrapolate_indices(const at::Tensor& masks, uint extrapolate_window)
                     uint result = 0;
                     #pragma unroll
                     for (int bit_idx = 0; bit_idx < min(32, num_keyframes - pack_offset); ++bit_idx) {
-                        result |= cur_masks_ptr[pack_offset + bit_idx] << bit_idx;
+                        result |= uint(cur_masks_ptr[pack_offset + bit_idx] != 0) << bit_idx;
                     }
                     return result;
                 });

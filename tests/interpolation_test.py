@@ -115,6 +115,103 @@ class TrajectoryManyQueriesTest(TrajectorySampleTest):
     num_queries = 256
 
 
+class TrajectoryTranslationsOnlyTest(TrajectorySampleTest):
+    """No quaternions: the rotation outputs are stride-0 dummies.
+
+    The rotation output is the first one, and the kernel used to size its
+    launch from it: only the first batch element was computed.
+    """
+    def setup_args(self, dtype, device) -> list[torch.Tensor]:
+        args = super().setup_args(dtype, device)
+        args[2] = None
+        return args
+
+
+class TrajectoryRotationsOnlyTest(TrajectorySampleTest):
+    """No translations: the translation outputs are stride-0 dummies."""
+    def setup_args(self, dtype, device) -> list[torch.Tensor]:
+        args = super().setup_args(dtype, device)
+        args[3] = None
+        return args
+
+
+class TrajectoryDegenerateBracketTest(TrajectorySampleTest):
+    """Brackets that collapse onto one keyframe.
+
+    Rows with a single valid keyframe, and queries clamped to the first or last
+    keyframe without extrapolation. The gap between the bracketing keyframes is
+    zero there, which used to give NaN gradients in the reference.
+    """
+    masked = True
+
+    fn = lambda *args: get_backend().sample_trajectory(
+        *args, extrapolate=False,
+        return_velocities=True, return_indices=True, return_mask=True)
+
+    def setup_args(self, dtype, device) -> list[torch.Tensor]:
+        args = super().setup_args(dtype, device)
+        mask = args[4]
+        rows = mask.shape[0] // 4
+        mask[:rows] = False                 # a quarter of the rows keep one valid keyframe
+        mask[:rows, self.num_keyframes // 2] = True
+        return args
+
+
+class TrajectorySingleKeyframeTest(TrajectorySampleTest):
+    """K=1: every bracket is the same keyframe."""
+    num_keyframes = 1
+
+
+class TrajectoryDuplicateTimesTest(TrajectorySampleTest):
+    """Pairs of keyframes with equal timestamps, queries on and between them.
+
+    A query at or past a duplicated timestamp is bracketed by the last of the
+    duplicates, with or without a mask.
+    """
+    masked = True
+
+    def setup_args(self, dtype, device) -> list[torch.Tensor]:
+        args = super().setup_args(dtype, device)
+        query, times = args[0], args[1]
+        times[..., 5] = times[..., 4]
+        times[..., 12] = times[..., 11]
+        times[..., 13] = times[..., 11]
+        query[..., :3] = times[..., [4, 11, 13]]
+        args[0] = query.sort(dim=-1).values
+        return args
+
+
+class TrajectorySmallGapTest(TrajectorySampleTest):
+    """Keyframes a fraction of a millisecond apart (float32) or of a microsecond
+    (float64): still well above the degenerate gap.
+
+    The kernel backward used to clamp the squared gap to eps, which distorted the
+    gradients w.r.t. keyframe times for gaps below sqrt(eps). float32 gradients
+    are large and lose digits, hence the relative float32 tolerance.
+    """
+    atol = 1e-2
+    rtol = 1e-2
+
+    def setup_args(self, dtype, device) -> list[torch.Tensor]:
+        args = super().setup_args(dtype, device)
+        # mean keyframe gap ~0.3: about 1e-4 in float32, 1e-8 in float64
+        scale = 3e-4 if dtype == torch.float32 else 3e-8
+        args[0] = args[0] * scale
+        args[1] = args[1] * scale
+        return args
+
+
+class TrajectorySharedSequenceTest(TrajectorySampleTest):
+    """One keyframe sequence and mask for the whole batch of queries."""
+    masked = True
+
+    def setup_args(self, dtype, device) -> list[torch.Tensor]:
+        query, times, quats, t, mask = super().setup_args(dtype, device)
+        times, quats, t, mask = times[0], quats[0], t[0], mask[0]
+        query = times[:1] - 1.0 + (times[-1:] - times[:1] + 2.0) * torch.rand_like(query)
+        return [query, times, quats, t, mask]
+
+
 class TrajectoryKeyframeSpacingTest(TrajectorySampleTest):
     """Tightly spaced keyframes.
 
@@ -142,4 +239,11 @@ __tests__ = [
     TrajectoryManyQueriesTest,
     TrajectoryKeyframeSpacingTest,
     TrajectoryPaddedTest,
+    TrajectoryTranslationsOnlyTest,
+    TrajectoryRotationsOnlyTest,
+    TrajectoryDegenerateBracketTest,
+    TrajectorySingleKeyframeTest,
+    TrajectoryDuplicateTimesTest,
+    TrajectorySmallGapTest,
+    TrajectorySharedSequenceTest,
 ]

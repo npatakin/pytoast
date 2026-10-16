@@ -1172,6 +1172,14 @@ inline __host__ __device__ double3 operator/(double3 a, double b) {
     return make_double3(a.x / b, a.y / b, a.z / b);
 }
 
+inline __host__ __device__ double4_32a operator/(double4_32a a, double4_32a b) {
+    return make_double4_32a(a.x / b.x, a.y / b.y, a.z / b.z, a.w / b.w);
+}
+
+inline __host__ __device__ double3 operator/(double3 a, double3 b) {
+    return make_double3(a.x / b.x, a.y / b.y, a.z / b.z);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // min
 ////////////////////////////////////////////////////////////////////////////////
